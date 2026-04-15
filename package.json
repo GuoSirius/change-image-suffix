@@ -1,0 +1,31 @@
+{
+  "name": "change-image-suffix",
+  "version": "1.0.0",
+  "description": "批量转换图片格式的CLI工具，支持递归搜索、深度限制、指定后缀等功能",
+  "main": "dist/index.js",
+  "bin": {
+    "change-image-suffix": "./dist/index.js",
+    "cis": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublish": "npm run build"
+  },
+  "keywords": ["cli", "image", "converter", "webp", "png", "jpg", "batch", "sharp"],
+  "author": "siriussupreme",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://gitee.com/siriussupreme/change-image-suffix.git"
+  },
+  "dependencies": {
+    "sharp": "^0.33.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
