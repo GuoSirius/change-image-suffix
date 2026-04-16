@@ -16,6 +16,7 @@ interface CliOptions {
   maxDepth: number;
   extensions: string[];
   targetFormat: string;
+  singleFile?: string;   // 单文件模式
 }
 
 // ─────────────────────────────────────────
@@ -95,8 +96,22 @@ function installContextMenu(): void {
   const dirCmd = dirBase + '\\command';
   regAddDefault(dirCmd, `cmd.exe /c "${cisCmd}" -p "%1" & pause`);
 
+  // ── 3. 单个文件右键（*\shell\cis）──
+  const fileBase = 'HKCU\\Software\\Classes\\*\\shell\\cis';
+  regAddDefault(fileBase, '转换此图片为 WebP (cis)');
+  regAdd(fileBase, 'Icon', iconPath);
+  // 限制仅图片文件类型显示（AppliesTo 过滤器）
+  regAdd(fileBase, 'AppliesTo',
+    'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR ' +
+    'System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR ' +
+    'System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif');
+  const fileCmd = fileBase + '\\command';
+  regAddDefault(fileCmd, `cmd.exe /c "${cisCmd}" -f "%1" & pause`);
+
   console.log('✅ 右键菜单安装成功！');
-  console.log('   在任意文件夹空白处或文件夹上右键，即可看到「转换图片为 WebP (cis)」');
+  console.log('   📁 文件夹空白处右键 → 转换整个目录的图片');
+  console.log('   📁 文件夹图标上右键 → 转换该文件夹的图片');
+  console.log('   🖼️  图片文件上右键   → 转换该单个图片');
   console.log(`   图标位置: ${iconPath}`);
   console.log('\n💡 提示：如需卸载，执行 cis uninstall-menu');
 }
@@ -105,7 +120,8 @@ function uninstallContextMenu(): void {
   requireWindows();
   regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis');
   regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis');
-  console.log('✅ 右键菜单已卸载');
+  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis');
+  console.log('✅ 右键菜单已卸载（目录 + 文件）');
 }
 
 // ─────────────────────────────────────────
@@ -120,6 +136,7 @@ function parseArgs(): CliOptions {
   let maxDepth = Infinity;
   let extensions: string[] = DEFAULT_EXTENSIONS;
   let targetFormat = DEFAULT_TARGET_FORMAT;
+  let singleFile: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -154,7 +171,7 @@ function parseArgs(): CliOptions {
     if (arg === '-h' || arg === '--help') { printHelp(); process.exit(0); }
 
     if (arg === '-v' || arg === '--version') {
-      console.log('change-image-suffix v1.1.0');
+      console.log('change-image-suffix v1.3.0');
       process.exit(0);
     }
 
@@ -165,11 +182,38 @@ function parseArgs(): CliOptions {
       continue;
     }
 
+    if (arg === '-f' || arg === '--file') {
+      if (i + 1 < args.length) {
+        singleFile = path.resolve(args[++i]);
+      }
+      continue;
+    }
+
     if (!arg.startsWith('-')) {
-      directory = path.resolve(arg);
+      // 位置参数：若是文件则当作单文件，否则当作目录
+      const resolved = path.resolve(arg);
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+        singleFile = resolved;
+      } else {
+        directory = resolved;
+      }
     }
   }
 
+  // 单文件模式：验证文件
+  if (singleFile) {
+    if (!fs.existsSync(singleFile)) {
+      console.error(`❌ 文件不存在: ${singleFile}`);
+      process.exit(1);
+    }
+    if (!fs.statSync(singleFile).isFile()) {
+      console.error(`❌ 路径不是文件: ${singleFile}`);
+      process.exit(1);
+    }
+    return { directory, recursive, maxDepth, extensions, targetFormat, singleFile };
+  }
+
+  // 目录模式：验证目录
   if (!fs.existsSync(directory)) {
     console.error(`❌ 目录不存在: ${directory}`);
     process.exit(1);
@@ -194,6 +238,7 @@ function printHelp(): void {
   cis uninstall-menu             # 从 Windows 右键菜单移除
 
 选项:
+  -f, --file <file>       转换单个文件（右键文件时自动传入）
   -p, --path <dir>        指定工作目录（默认: 当前目录）
   -r, --recursive         递归搜索子目录
   -d, --depth <n>         递归深度限制（需要 -r 选项）
@@ -204,6 +249,7 @@ function printHelp(): void {
 
 示例:
   cis                              # 转换当前目录的图片为 webp
+  cis -f ./photo.png               # 转换单个文件
   cis -p ./images                  # 转换指定目录
   cis -r                           # 递归转换当前目录
   cis -r -d 2 -p ./images          # 递归转换，深度限制为2
@@ -330,6 +376,38 @@ async function main(): Promise<void> {
 
   const options = parseArgs();
 
+  // ─── 单文件模式 ───
+  if (options.singleFile) {
+    const filePath = options.singleFile;
+    const ext = path.extname(filePath).slice(1).toLowerCase();
+
+    console.log(`📄 文件: ${filePath}`);
+    console.log(`🎯 目标格式: ${options.targetFormat}`);
+    console.log('\n----------------------------------------\n');
+
+    // 检查文件后缀是否是支持的图片格式
+    const supportedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'avif'];
+    if (!supportedExts.includes(ext)) {
+      console.error(`❌ 不支持的文件格式: .${ext}`);
+      console.error(`   支持的格式: ${supportedExts.join(', ')}`);
+      process.exit(1);
+    }
+
+    process.stdout.write(`  处理中: ${path.basename(filePath)} ... `);
+    const result = await convertImage(filePath, options.targetFormat);
+
+    if (result.success) {
+      console.log(`✅ -> ${path.basename(result.outputPath)}`);
+      console.log(`\n   输出文件: ${result.outputPath}`);
+      console.log('\n✅ 转换完成！\n');
+    } else {
+      console.log(`❌ 失败 (${result.error})`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  // ─── 目录批量模式 ───
   console.log(`📂 目录: ${options.directory}`);
   console.log(`🔁 递归: ${options.recursive ? `是 (深度: ${options.maxDepth === Infinity ? '无限制' : options.maxDepth})` : '否'}`);
   console.log(`📄 后缀: ${options.extensions.join(', ')}`);
