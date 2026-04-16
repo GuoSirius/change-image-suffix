@@ -78,60 +78,87 @@ function installContextMenu(): void {
   }
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
-  // ── 格式列表（全部支持输出格式）──
+  // ── 全部使用 PowerShell 注册表操作 ──
   const formats = [
-    { verb: 'webp',  label: '🌀 WebP' },
-    { verb: 'jpg',   label: '📷 JPG' },
-    { verb: 'png',   label: '🖼 PNG' },
-    { verb: 'avif',  label: '📺 AVIF' },
-    { verb: 'gif',   label: '🎞 GIF' },
-    { verb: 'tiff',  label: '📋 TIFF' },
-    { verb: 'heif',  label: '🍎 HEIF' },
-    { verb: 'jp2',   label: '📐 JPEG2000' },
+    { verb: 'webp', label: '🌀 WebP' },
+    { verb: 'jpg', label: '📷 JPG' },
+    { verb: 'png', label: '🖼 PNG' },
+    { verb: 'avif', label: '📺 AVIF' },
+    { verb: 'gif', label: '🎞 GIF' },
+    { verb: 'tiff', label: '📋 TIFF' },
+    { verb: 'heif', label: '🍎 HEIF' },
+    { verb: 'jp2', label: '📐 JPEG2000' },
   ];
-  const verbs = formats.map(f => f.verb).join(';'); // "webp;jpg;png;avif;gif"
 
-  // ── 用 reg.exe 注册 Windows SubCommands 级联菜单 ──
-  // SubCommands = 分号分隔的 verb 列表，Explorer 自动渲染为悬停展开的子菜单
-  function registerMenu(baseKey: string, cmdTemplate: string): void {
-    // 主菜单项
-    regAddDefault(baseKey, '🖼 转换图片 (cis)');
-    regAdd(baseKey, 'Icon', iconPath);
-    regAdd(baseKey, 'SubCommands', verbs); // 关键：触发悬停展开子菜单
+  // 转义单引号用于 PowerShell 字符串
+  const escapedCis = cisCmd.replace(/'/g, "''");
+  const escapedIcon = iconPath.replace(/'/g, "''");
 
-    // 每个格式的子菜单项
-    formats.forEach(fmt => {
-      const subKey = `${baseKey}\\shell\\${fmt.verb}`;
-      regAddDefault(subKey, fmt.label);
-      regAdd(subKey, 'Icon', iconPath);
-      const cmd = cmdTemplate.replace('%FMT%', fmt.verb);
-      regAddDefault(`${subKey}\\command`, cmd);
-    });
+  const psScript = `
+$cwd = Get-Location
+$cisCmd = '${escapedCis}'
+$iconPath = '${escapedIcon}'
+$formats = @(
+  @{Verb='webp'; Label='🌀 WebP'},
+  @{Verb='jpg'; Label='📷 JPG'},
+  @{Verb='png'; Label='🖼 PNG'},
+  @{Verb='avif'; Label='📺 AVIF'},
+  @{Verb='gif'; Label='🎞 GIF'},
+  @{Verb='tiff'; Label='📋 TIFF'},
+  @{Verb='heif'; Label='🍎 HEIF'},
+  @{Verb='jp2'; Label='📐 JPEG2000'}
+)
+
+$menuBases = @(
+  @{Base='HKCU:\\Software\\Classes\\Directory\\Background\\shell\\cis'; Arg='-p "%V"'},
+  @{Base='HKCU:\\Software\\Classes\\Directory\\shell\\cis'; Arg='-p "%1"'},
+  @{Base='HKCU:\\Software\\Classes\\*\\shell\\cis'; Arg='-f "%1"'}
+)
+
+foreach ($menu in $menuBases) {
+    $base = $menu.Base
+    $arg = $menu.Arg
+
+    # 创建主键
+    New-Item -Path $base -Force | Out-Null
+    Set-ItemProperty -Path $base -Name "(Default)" -Value "🖼 转换图片 (cis)"
+    Set-ItemProperty -Path $base -Name "Icon" -Value $iconPath
+    Set-ItemProperty -Path $base -Name "SubCommands" -Value ""
+
+    # 每个格式的子菜单
+    foreach ($fmt in $formats) {
+        $shellKey = "$base\\shell\\$($fmt.Verb)"
+        $cmdKey = "$shellKey\\command"
+
+        New-Item -Path $shellKey -Force | Out-Null
+        Set-ItemProperty -Path $shellKey -Name "(Default)" -Value $fmt.Label
+        Set-ItemProperty -Path $shellKey -Name "Icon" -Value $iconPath
+
+        $cmd = "cmd.exe /c chcp 65001 >nul && ""$cisCmd"" -t $($fmt.Verb) $arg"
+        New-Item -Path $cmdKey -Force | Out-Null
+        Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value $cmd
+    }
+}
+
+# 文件右键添加 AppliesTo 过滤器
+Set-ItemProperty -Path "HKCU:\\Software\\Classes\\*\\shell\\cis" -Name "AppliesTo" -Value "System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif"
+
+Write-Host "✅ 右键菜单安装成功！"
+`;
+
+  const psPath = path.join(appDataDir, 'install-menu.ps1');
+  const BOM = '\ufeff';
+  fs.writeFileSync(psPath, BOM + psScript, 'utf8');
+
+  try {
+    execSync(`powershell.exe -ExecutionPolicy Bypass -File "${psPath}"`, { stdio: 'inherit' });
+  } catch {
+    console.error('❌ 右键菜单安装失败');
+    process.exit(1);
   }
 
-  // 对路径中的双引号进行 cmd.exe 转义（用 ^" 代替 "）
-  const escapedCisCmd = cisCmd.replace(/"/g, '^"');
-
-  // 1. 目录空白处右键
-  const bgBase = 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis';
-  registerMenu(bgBase, `cmd.exe /c "chcp 65001 >nul && "${escapedCisCmd}" -t %FMT% -p "%V""`);
-
-  // 2. 目录图标上右键
-  const dirBase = 'HKCU\\Software\\Classes\\Directory\\shell\\cis';
-  registerMenu(dirBase, `cmd.exe /c "chcp 65001 >nul && "${escapedCisCmd}" -t %FMT% -p "%1""`);
-
-  // 3. 文件上右键（仅图片文件）
-  const fileBase = 'HKCU\\Software\\Classes\\*\\shell\\cis';
-  registerMenu(fileBase, `cmd.exe /c "chcp 65001 >nul && "${escapedCisCmd}" -t %FMT% -f "%1""`);
-  const appliesTo =
-    'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR ' +
-    'System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR ' +
-    'System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif';
-  regAdd(fileBase, 'AppliesTo', appliesTo);
-
-  console.log('✅ 右键菜单安装成功！');
-  console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式子菜单选择');
-  console.log('   🖼  图片文件上右键       → 悬停展开格式子菜单选择');
+  console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式子菜单');
+  console.log('   🖼  图片文件上右键       → 悬停展开格式子菜单');
   console.log(`   📂 输出目录: <原目录>/output/`);
   console.log('\n💡 提示：如需卸载，执行 cis uninstall-menu');
 }
@@ -139,19 +166,29 @@ function installContextMenu(): void {
 function uninstallContextMenu(): void {
   requireWindows();
 
-  const bases = [
-    'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis',
-    'HKCU\\Software\\Classes\\Directory\\shell\\cis',
-    'HKCU\\Software\\Classes\\*\\shell\\cis',
-  ];
-  const verbs = ['webp', 'jpg', 'png', 'avif', 'gif'];
+  const psScript = `
+$keys = @(
+  'HKCU:\\Software\\Classes\\Directory\\Background\\shell\\cis',
+  'HKCU:\\Software\\Classes\\Directory\\shell\\cis',
+  'HKCU:\\Software\\Classes\\*\\shell\\cis'
+)
+foreach ($key in $keys) {
+    Remove-Item -Path $key -Recurse -Force -ErrorAction SilentlyContinue
+}
+Write-Host "✅ 右键菜单已卸载"
+`;
 
-  for (const base of bases) {
-    // 删除主键（包含 shell 子键树）
-    regDelete(base);
+  const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
+  const psPath = path.join(appDataDir, 'uninstall-menu.ps1');
+  const BOM = '\ufeff';
+  fs.writeFileSync(psPath, BOM + psScript, 'utf8');
+
+  try {
+    execSync(`powershell.exe -ExecutionPolicy Bypass -File "${psPath}"`, { stdio: 'inherit' });
+  } catch {
+    console.error('❌ 卸载失败');
+    process.exit(1);
   }
-
-  console.log('✅ 右键菜单已卸载');
 }
 
 // ─────────────────────────────────────────
