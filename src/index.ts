@@ -118,42 +118,65 @@ if ($files.Count -gt 0) {
   // - Windows 自动将父命令收到的文件路径追加在末尾
   // - 最终执行: cmd /c "bat" "格式" "文件路径"
   // 移除 AppliesTo 限制后，bat 需要过滤非图片文件
-  const batContent = `@echo off
+  const batContent = `
+@echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
+
+REM Get this script's directory (no trailing backslash)
+set "SCRIPT_DIR=%~dp0"
+set "SCRIPT_DIR=!SCRIPT_DIR:~0,-1!"
 
 REM Get cis.cmd path
 for /f "delims=" %%c in ('where cis.cmd 2^>nul') do set "CIS_CMD=%%c"
 
-REM Function: check if file is supported image format
+REM Supported image extensions
 set "SUPPORTED_EXT=.png;.jpg;.jpeg;.gif;.bmp;.tiff;.tif;.webp;.avif"
 
 REM %1 = format (from subcommand), %2 = file path (from Windows)
 if "%~1"=="" (
     echo Error: No format specified.
-    pause
+    timeout /t 2 >nul
     goto :done
 )
 set "format=%~1"
 
-REM Process files
+REM Collect all image files
+set "fileList="
+
+REM Windows passes file path as %2. If multiple files selected, use PowerShell.
+REM Otherwise use direct argument.
 if "%~2"=="" (
-    REM No file path from Windows: use PowerShell to get selected files (multi-file)
-    for /f "delims=" %%i in ('powershell -ExecutionPolicy Bypass -File "${ps1Path}" 2^>nul') do (
+    REM Multi-file via PowerShell (with retries for reliability)
+    for /f "delims=" %%i in ('powershell -ExecutionPolicy Bypass -File "!SCRIPT_DIR!\\cis_getfiles.ps1"') do (
         if not "%%i"=="NO_FILES" (
-            call :check_and_convert "%%i"
+            call :add_if_image "%%i"
         )
     )
 ) else (
-    REM Has file path: use it directly (single file from Windows)
-    call :check_and_convert "%~2"
+    REM Single file or multiple via %2 (space-separated)
+    REM Split space-separated paths
+    for %%F in (%~2) do (
+        call :add_if_image "%%F"
+    )
+)
+
+REM Process all collected files - use start /b to avoid new window
+if not "!fileList!"=="" (
+    start "" /b cmd /c "!CIS_CMD! -t !format! !fileList!"
 )
 goto :done
 
-:check_and_convert
+:add_if_image
 set "filePath=%~1"
+REM Skip if empty or NO_FILES
+if "!filePath!"=="" exit /b
+if "!filePath!"=="NO_FILES" exit /b
+
 REM Get file extension
 for %%E in ("!filePath!") do set "ext=%%~xE"
+if "!ext!"=="" exit /b
+
 REM Convert to lowercase
 set "ext_lower=!ext!"
 call set "ext_lower=%%ext_lower:A=a%%
@@ -181,18 +204,25 @@ call set "ext_lower=%%ext_lower:V=v%%
 call set "ext_lower=%%ext_lower:W=w%%
 call set "ext_lower=%%ext_lower:X=x%%
 call set "ext_lower=%%ext_lower:Y=y%%
-call set "ext_lower=%%ext_lower:Z=z%%
+call set "ext_lower=%%ext_lower:Z=z%%"
+
 REM Check if extension is supported
 echo !SUPPORTED_EXT! | findstr /i /c:"!ext_lower!" >nul 2>&1
 if !errorlevel!==0 (
-    call !CIS_CMD! -t !format! -f "!filePath!"
-) else (
-    REM Not a supported image, skip silently
+    set "fileList=!fileList! -f "!filePath!""
 )
 exit /b
 
 :done
 endlocal
+exit
+
+exit
+
+exit
+
+exit
+
 `;
   fs.writeFileSync(batPath, batContent, 'utf8');
 
