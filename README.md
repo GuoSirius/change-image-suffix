@@ -62,7 +62,7 @@ cis uninstall-menu
 
 ```
 🖼 转换图片 (cis)    ← 悬停展开
-  ├── 🌀 WebP
+  ├── 🌀 WebP       ← 默认
   ├── 📷 JPG
   ├── 🖼 PNG
   ├── 📺 AVIF

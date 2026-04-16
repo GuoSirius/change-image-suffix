@@ -78,11 +78,11 @@ function installContextMenu(): void {
   }
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
-  // ── 格式列表 ──
+  // ── 格式列表（webp 排第一，其他按常见程度排序）──
   const formats = [
     { verb: 'webp', label: '🌀 WebP' },
-    { verb: 'jpg', label: '📷 JPG' },
     { verb: 'png', label: '🖼 PNG' },
+    { verb: 'jpg', label: '📷 JPG' },
     { verb: 'avif', label: '📺 AVIF' },
     { verb: 'gif', label: '🎞 GIF' },
     { verb: 'tiff', label: '📋 TIFF' },
@@ -91,30 +91,29 @@ function installContextMenu(): void {
   ];
 
   // ── 使用 ExtendedSubCommandsKey 方式（PowerShell 7 同款）──
-  // 公共子菜单注册位置
-  const subMenuRoot = 'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis';
-
-  // 主菜单项配置
+  // 主菜单项配置（每个菜单类型有独立的子菜单路径）
   const menuBases = [
-    { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', arg: '-p "%V"' },
-    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', arg: '-p "%1"' },
-    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', arg: '-f "%1"', isFile: true },
+    { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
+    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', arg: '-p "%1"' },
+    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', arg: '-f "%1"', isFile: true },
   ];
 
-  // 1. 注册公共子菜单
-  for (const fmt of formats) {
-    const shellKey = `${subMenuRoot}\\shell\\${fmt.verb}`;
-    const cmd = `"${cisCmd}" -t ${fmt.verb} ${menuBases[0].arg}`;
-    execSync(`reg add "${shellKey}" /ve /d "${fmt.label}" /f`, { stdio: 'ignore' });
-    execSync(`reg add "${shellKey}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
-    execSync(`reg add "${shellKey}\\command" /ve /d "cmd /c ${cmd}" /f`, { stdio: 'ignore' });
+  // 1. 注册公共子菜单（每种菜单类型独立注册）
+  for (const menu of menuBases) {
+    for (const fmt of formats) {
+      const shellKey = `${menu.subMenu}\\shell\\${fmt.verb}`;
+      const cmd = `"${cisCmd}" -t ${fmt.verb} ${menu.arg}`;
+      execSync(`reg add "${shellKey}" /ve /d "${fmt.label}" /f`, { stdio: 'ignore' });
+      execSync(`reg add "${shellKey}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
+      execSync(`reg add "${shellKey}\\command" /ve /d "cmd /c ${cmd}" /f`, { stdio: 'ignore' });
+    }
   }
 
-  // 2. 注册主菜单项（使用 ExtendedSubCommandsKey 关联子菜单）
+  // 2. 注册主菜单项（使用 ExtendedSubCommandsKey 关联各自的子菜单）
   for (const menu of menuBases) {
     execSync(`reg add "${menu.base}" /ve /d "🖼 转换图片 (cis)" /f`, { stdio: 'ignore' });
     execSync(`reg add "${menu.base}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
-    execSync(`reg add "${menu.base}" /v ExtendedSubCommandsKey /d "Directory\\ContextMenus\\cis" /f`, { stdio: 'ignore' });
+    execSync(`reg add "${menu.base}" /v ExtendedSubCommandsKey /d "${menu.subMenu}" /f`, { stdio: 'ignore' });
 
     // 文件右键添加 AppliesTo 限制
     if ((menu as any).isFile) {
@@ -146,10 +145,17 @@ function uninstallContextMenu(): void {
     } catch { /* ignore */ }
   }
 
-  // 删除公共子菜单
-  try {
-    execSync(`reg delete "HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis" /f`, { stdio: 'ignore' });
-  } catch { /* ignore */ }
+  // 删除公共子菜单（三个：目录空白、目录图标、文件）
+  const subMenuRoots = [
+    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis',
+    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_dir',
+    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_file',
+  ];
+  for (const root of subMenuRoots) {
+    try {
+      execSync(`reg delete "${root}" /f`, { stdio: 'ignore' });
+    } catch { /* ignore */ }
+  }
 
   console.log('✅ 右键菜单已卸载');
 }
