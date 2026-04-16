@@ -183,6 +183,18 @@ cis -r -d 1 -p ./project
 cis -f ./avatar.png -t webp
 ```
 
+### 示例 6：多选文件/目录批量转换
+
+```bash
+# 多选文件（空格分隔），每个文件的输出在其所在目录的 output/
+cis ./photo1.png ./photo2.jpg ./folder3
+
+# 多选多个目录
+cis ./images ./icons ./logos
+```
+
+> 💡 **多选时**：每个文件/目录的输出结果放在**各自所在目录的 `output/` 子目录**中，互不干扰。
+
 ---
 
 ## 安装与更新

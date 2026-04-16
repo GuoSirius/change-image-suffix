@@ -17,6 +17,7 @@ interface CliOptions {
   extensions: string[];
   targetFormat: string;
   singleFile?: string;   // 单文件模式
+  multiPaths?: string[]; // 多路径模式（多选文件/目录）
 }
 
 // ─────────────────────────────────────────
@@ -154,22 +155,27 @@ function uninstallContextMenu(): void {
 function parseArgs(): CliOptions {
   const args = process.argv.slice(2);
 
-  let directory = process.cwd();
-  let recursive = false;
-  let maxDepth = Infinity;
-  let extensions: string[] = DEFAULT_EXTENSIONS;
-  let targetFormat = DEFAULT_TARGET_FORMAT;
-  let singleFile: string | undefined;
+  const options: CliOptions = {
+    directory: process.cwd(),
+    recursive: false,
+    maxDepth: Infinity,
+    extensions: [...DEFAULT_EXTENSIONS],
+    targetFormat: DEFAULT_TARGET_FORMAT,
+  };
+
+  // 用于暂存多路径收集
+  let pendingPaths: string[] = [];
+  let firstPathType: 'file' | 'dir' | null = null;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg === '-r' || arg === '--recursive') { recursive = true; continue; }
+    if (arg === '-r' || arg === '--recursive') { options.recursive = true; continue; }
 
     if (arg === '-d' || arg === '--depth') {
       if (i + 1 < args.length) {
-        maxDepth = parseInt(args[++i], 10);
-        if (isNaN(maxDepth) || maxDepth < 1) {
+        options.maxDepth = parseInt(args[++i], 10);
+        if (isNaN(options.maxDepth) || options.maxDepth < 1) {
           console.error('❌ 深度必须是正整数');
           process.exit(1);
         }
@@ -179,14 +185,14 @@ function parseArgs(): CliOptions {
 
     if (arg === '-e' || arg === '--extensions') {
       if (i + 1 < args.length) {
-        extensions = args[++i].split(',').map(e => e.trim().toLowerCase().replace(/^\./, ''));
+        options.extensions = args[++i].split(',').map(e => e.trim().toLowerCase().replace(/^\./, ''));
       }
       continue;
     }
 
     if (arg === '-t' || arg === '--to') {
       if (i + 1 < args.length) {
-        targetFormat = args[++i].trim().toLowerCase().replace(/^\./, '');
+        options.targetFormat = args[++i].trim().toLowerCase().replace(/^\./, '');
       }
       continue;
     }
@@ -194,60 +200,72 @@ function parseArgs(): CliOptions {
     if (arg === '-h' || arg === '--help') { printHelp(); process.exit(0); }
 
     if (arg === '-v' || arg === '--version') {
-      console.log('change-image-suffix v1.8.0');
+      console.log('change-image-suffix v1.9.0');
       process.exit(0);
     }
 
     if (arg === '-p' || arg === '--path') {
       if (i + 1 < args.length) {
-        directory = path.resolve(args[++i]);
+        options.directory = path.resolve(args[++i]);
       }
       continue;
     }
 
     if (arg === '-f' || arg === '--file') {
       if (i + 1 < args.length) {
-        singleFile = path.resolve(args[++i]);
+        options.singleFile = path.resolve(args[++i]);
       }
       continue;
     }
 
     if (!arg.startsWith('-')) {
-      // 位置参数：若是文件则当作单文件，否则当作目录
-      const resolved = path.resolve(arg);
-      if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
-        singleFile = resolved;
+      // 位置参数：全部收集为路径
+      pendingPaths.push(path.resolve(arg));
+    }
+  }
+
+  // 处理收集到的路径
+  if (pendingPaths.length > 0) {
+    if (pendingPaths.length === 1) {
+      // 只有一个路径
+      const p = pendingPaths[0];
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        options.singleFile = p;
       } else {
-        directory = resolved;
+        options.directory = p;
       }
+    } else {
+      // 多个路径 → 多路径模式
+      options.multiPaths = pendingPaths;
     }
   }
 
-  // 单文件模式：验证文件
-  if (singleFile) {
-    if (!fs.existsSync(singleFile)) {
-      console.error(`❌ 文件不存在: ${singleFile}`);
+  // 验证单文件模式
+  if (options.singleFile) {
+    if (!fs.existsSync(options.singleFile)) {
+      console.error(`❌ 文件不存在: ${options.singleFile}`);
       process.exit(1);
     }
-    if (!fs.statSync(singleFile).isFile()) {
-      console.error(`❌ 路径不是文件: ${singleFile}`);
+    if (!fs.statSync(options.singleFile).isFile()) {
+      console.error(`❌ 路径不是文件: ${options.singleFile}`);
       process.exit(1);
     }
-    return { directory, recursive, maxDepth, extensions, targetFormat, singleFile };
+    return options;
   }
 
-  // 目录模式：验证目录
-  if (!fs.existsSync(directory)) {
-    console.error(`❌ 目录不存在: ${directory}`);
-    process.exit(1);
+  // 验证目录模式（单目录或多路径）
+  if (!options.multiPaths) {
+    if (!fs.existsSync(options.directory)) {
+      console.error(`❌ 目录不存在: ${options.directory}`);
+      process.exit(1);
+    }
+    if (!fs.statSync(options.directory).isDirectory()) {
+      console.error(`❌ 路径不是目录: ${options.directory}`);
+      process.exit(1);
+    }
   }
 
-  if (!fs.statSync(directory).isDirectory()) {
-    console.error(`❌ 路径不是目录: ${directory}`);
-    process.exit(1);
-  }
-
-  return { directory, recursive, maxDepth, extensions, targetFormat };
+  return options;
 }
 
 function printHelp(): void {
@@ -430,7 +448,6 @@ async function main(): Promise<void> {
     console.log(`🎯 目标格式: ${options.targetFormat}`);
     console.log('\n----------------------------------------\n');
 
-    // 检查文件后缀是否是支持的图片格式
     const supportedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'avif'];
     if (!supportedExts.includes(ext)) {
       console.error(`❌ 不支持的文件格式: .${ext}`);
@@ -449,6 +466,75 @@ async function main(): Promise<void> {
       console.log(`❌ 失败 (${result.error})`);
       process.exit(1);
     }
+    return;
+  }
+
+  // ─── 多路径模式 ───
+  if (options.multiPaths) {
+    console.log(`\n🖼️  change-image-suffix - 批量转换工具\n`);
+    console.log(`🎯 目标格式: ${options.targetFormat}`);
+    console.log(`📦 待处理: ${options.multiPaths.length} 个路径\n`);
+    console.log('----------------------------------------\n');
+
+    let totalSuccess = 0;
+    let totalFail = 0;
+
+    for (const inputPath of options.multiPaths) {
+      const stat = fs.existsSync(inputPath) ? fs.statSync(inputPath) : null;
+
+      if (!stat) {
+        console.log(`  ⚠️  跳过（不存在）: ${inputPath}`);
+        totalFail++;
+        continue;
+      }
+
+      if (stat.isFile()) {
+        // 文件：输出到其所在目录的 output/
+        const ext = path.extname(inputPath).slice(1).toLowerCase();
+        const supportedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'avif'];
+        if (!supportedExts.includes(ext)) {
+          console.log(`  ⚠️  跳过（不支持格式）: ${inputPath}`);
+          totalFail++;
+          continue;
+        }
+
+        console.log(`  📄 文件: ${inputPath}`);
+        process.stdout.write(`     处理中: ${path.basename(inputPath)} ... `);
+        const result = await convertImage(inputPath, options.targetFormat, [inputPath]);
+        if (result.success) {
+          console.log(`✅ -> ${path.relative(path.dirname(inputPath), result.outputPath)}`);
+          totalSuccess++;
+        } else {
+          console.log(`❌ 失败 (${result.error})`);
+          totalFail++;
+        }
+      } else {
+        // 目录：输出到该目录的 output/
+        const files = getAllFiles(inputPath, options.extensions, options.recursive, 0, options.maxDepth);
+        console.log(`  📁 目录: ${inputPath} (${files.length} 个文件)`);
+
+        if (files.length === 0) {
+          console.log('     ✅ 没有找到图片文件');
+          continue;
+        }
+
+        for (const file of files) {
+          process.stdout.write(`     处理中: ${path.basename(file)} ... `);
+          const result = await convertImage(file, options.targetFormat, files);
+          if (result.success) {
+            console.log(`✅`);
+            totalSuccess++;
+          } else {
+            console.log(`❌ (${result.error})`);
+            totalFail++;
+          }
+        }
+      }
+      console.log('');
+    }
+
+    console.log('----------------------------------------');
+    console.log(`\n📊 转换完成！成功: ${totalSuccess}, 失败: ${totalFail}\n`);
     return;
   }
 
