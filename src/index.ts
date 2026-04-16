@@ -90,39 +90,38 @@ function installContextMenu(): void {
     { verb: 'jp2', label: '📐 JPEG2000' },
   ];
 
-  // ── 菜单配置 ──
+  // ── 使用 ExtendedSubCommandsKey 方式（PowerShell 7 同款）──
+  // 公共子菜单注册位置
+  const subMenuRoot = 'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis';
+
+  // 主菜单项配置
   const menuBases = [
     { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', arg: '-p "%V"' },
     { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', arg: '-p "%1"' },
-    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', arg: '-f "%1"' },
+    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', arg: '-f "%1"', isFile: true },
   ];
 
-  // ── 直接使用 reg.exe 命令安装注册表 ──
-  const menuLabel = '🖼 转换图片 (cis)';
-  const appliesTo = 'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif';
-
-  function addReg(key: string, name: string, value: string): void {
-    const cmd = name === '(default)'
-      ? `reg add "${key}" /ve /d "${value}" /f`
-      : `reg add "${key}" /v "${name}" /d "${value}" /f`;
-    execSync(cmd, { stdio: 'ignore' });
+  // 1. 注册公共子菜单
+  for (const fmt of formats) {
+    const shellKey = `${subMenuRoot}\\shell\\${fmt.verb}`;
+    const cmd = `"${cisCmd}" -t ${fmt.verb} ${menuBases[0].arg}`;
+    execSync(`reg add "${shellKey}" /ve /d "${fmt.label}" /f`, { stdio: 'ignore' });
+    execSync(`reg add "${shellKey}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
+    execSync(`reg add "${shellKey}\\command" /ve /d "cmd /c ${cmd}" /f`, { stdio: 'ignore' });
   }
 
+  // 2. 注册主菜单项（使用 ExtendedSubCommandsKey 关联子菜单）
   for (const menu of menuBases) {
-    addReg(menu.base, '(default)', menuLabel);
-    addReg(menu.base, 'Icon', iconPath);
-    addReg(menu.base, 'SubCommands', '');
+    execSync(`reg add "${menu.base}" /ve /d "🖼 转换图片 (cis)" /f`, { stdio: 'ignore' });
+    execSync(`reg add "${menu.base}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
+    execSync(`reg add "${menu.base}" /v ExtendedSubCommandsKey /d "Directory\\ContextMenus\\cis" /f`, { stdio: 'ignore' });
 
-    for (const fmt of formats) {
-      const shellKey = `${menu.base}\\shell\\${fmt.verb}`;
-      const cmd = `cmd /c ""${cisCmd}" -t ${fmt.verb} ${menu.arg}"`;
-      addReg(shellKey, '(default)', fmt.label);
-      addReg(shellKey, 'Icon', iconPath);
-      addReg(`${shellKey}\\command`, '(default)', cmd);
+    // 文件右键添加 AppliesTo 限制
+    if ((menu as any).isFile) {
+      const appliesTo = 'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif';
+      execSync(`reg add "${menu.base}" /v AppliesTo /d "${appliesTo}" /f`, { stdio: 'ignore' });
     }
   }
-
-  addReg('HKCU\\Software\\Classes\\*\\shell\\cis', 'AppliesTo', appliesTo);
 
   console.log('✅ 右键菜单安装成功！');
   console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式子菜单');
@@ -134,20 +133,23 @@ function installContextMenu(): void {
 function uninstallContextMenu(): void {
   requireWindows();
 
-  // 删除注册表项
-  const keys = [
+  // 删除主菜单项
+  const mainKeys = [
     'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis',
     'HKCU\\Software\\Classes\\Directory\\shell\\cis',
     'HKCU\\Software\\Classes\\*\\shell\\cis',
   ];
 
-  for (const key of keys) {
+  for (const key of mainKeys) {
     try {
       execSync(`reg delete "${key}" /f`, { stdio: 'ignore' });
-    } catch {
-      // 忽略不存在的键
-    }
+    } catch { /* ignore */ }
   }
+
+  // 删除公共子菜单
+  try {
+    execSync(`reg delete "HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis" /f`, { stdio: 'ignore' });
+  } catch { /* ignore */ }
 
   console.log('✅ 右键菜单已卸载');
 }
@@ -204,7 +206,7 @@ function parseArgs(): CliOptions {
     if (arg === '-h' || arg === '--help') { printHelp(); process.exit(0); }
 
     if (arg === '-v' || arg === '--version') {
-      console.log('change-image-suffix v1.10.0');
+      console.log('change-image-suffix v1.15.0');
       process.exit(0);
     }
 
