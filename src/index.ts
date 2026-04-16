@@ -99,9 +99,10 @@ function installContextMenu(): void {
   ];
 
   // 1. 注册公共子菜单（每种菜单类型独立注册）
+  const REG_ROOT = 'HKCU\\Software\\Classes\\';
   for (const menu of menuBases) {
     for (const fmt of formats) {
-      const shellKey = `${menu.subMenu}\\shell\\${fmt.verb}`;
+      const shellKey = `${REG_ROOT}${menu.subMenu}\\shell\\${fmt.verb}`;
       const cmd = `"${cisCmd}" -t ${fmt.verb} ${menu.arg}`;
       execSync(`reg add "${shellKey}" /ve /d "${fmt.label}" /f`, { stdio: 'ignore' });
       execSync(`reg add "${shellKey}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
