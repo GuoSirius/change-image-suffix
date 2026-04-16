@@ -330,10 +330,8 @@ function getOutputPath(
   const originalExt = ext.slice(1).toLowerCase();
   const targetExt = targetFormat;
 
-  // 源格式与目标格式相同时，保留双重后缀
-  let coreName = originalExt === targetExt
-    ? `${basename}.${originalExt}`
-    : basename;
+  // 源格式与目标格式相同时，直接覆盖
+  const coreName = basename;
 
   const outputDir = path.join(dir, 'output');
 
