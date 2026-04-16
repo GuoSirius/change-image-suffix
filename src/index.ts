@@ -52,7 +52,7 @@ function regDelete(key: string): void {
 function installContextMenu(): void {
   requireWindows();
 
-  // cis.cmd 的路径
+  // ── 查找 cis.cmd 路径 ──
   let cisCmd = '';
   try {
     cisCmd = execSync('where cis.cmd', { encoding: 'utf8' }).trim().split('\n')[0].trim();
@@ -65,7 +65,7 @@ function installContextMenu(): void {
     }
   }
 
-  // ── 复制 ICO 到用户 AppData 目录 ──
+  // ── 复制 ICO ──
   const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
   if (!fs.existsSync(appDataDir)) {
     fs.mkdirSync(appDataDir, { recursive: true });
@@ -77,40 +77,75 @@ function installContextMenu(): void {
   }
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
-  // ── 格式列表（直接注册为独立菜单项，点击即执行） ──
-  const formats = [
-    { label: '🌀 WebP', value: 'webp' },
-    { label: '📷 JPG', value: 'jpg' },
-    { label: '🖼 PNG', value: 'png' },
-    { label: '📺 AVIF', value: 'avif' },
-    { label: '🎞 GIF', value: 'gif' },
-  ];
+  // ── PowerShell 脚本：创建级联子菜单 ──
+  // 首次点击主菜单时执行，创建5个格式子菜单项，之后悬停自动展开
+  const escapedCisCmd = cisCmd.replace(/\\/g, '\\\\').replace(/'/g, "''");
+  const escapedIconPath = iconPath.replace(/\\/g, '\\\\').replace(/'/g, "''");
 
-  /**
-   * 为每种格式注册独立菜单项，点击即执行该格式
-   * 第一个格式（WebP）作为主项，其他作为独立项
-   */
-  function registerMenu(baseKey: string, cmdTemplate: string): void {
-    formats.forEach((fmt, index) => {
-      const key = index === 0 ? baseKey : `${baseKey}_${fmt.value}`;
-      regAddDefault(key, fmt.label);
-      regAdd(key, 'Icon', iconPath);
-      const cmd = cmdTemplate.replace('%FMT%', fmt.value);
-      regAddDefault(`${key}\\command`, cmd);
-    });
+  const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+function Create-SubMenu {
+    param($BaseKey, $CisCmd, $IconPath, $CmdTemplate)
+
+    $shell = New-Object -ComObject WScript.Shell
+    $formats = @(
+        @{Label="🌀 WebP";  Value="webp"},
+        @{Label="📷 JPG";   Value="jpg"},
+        @{Label="🖼 PNG";   Value="png"},
+        @{Label="📺 AVIF";  Value="avif"},
+        @{Label="🎞 GIF";   Value="gif"}
+    )
+
+    foreach ($fmt in $formats) {
+        $keyName = $BaseKey + "_" + $fmt.Value
+        $cmd = $CmdTemplate -replace '%FMT%', $fmt.Value
+
+        $key = $shell.CreateShortcut($keyName)
+        $key.Name = $fmt.Label
+        $key.IconLocation = $IconPath
+        $key.TargetPath = "cmd.exe"
+        $key.Arguments = '/c ' + $cmd
+        $key.Save()
+    }
+}
+
+$cisCmd = '${escapedCisCmd}'
+$iconPath = '${escapedIconPath}'
+$cmdBg = '""' + $cisCmd + '"" -t %FMT% -p ""%V""'
+$cmdDir = '""' + $cisCmd + '"" -t %FMT% -p ""%1""'
+$cmdFile = '""' + $cisCmd + '"" -t %FMT% -f ""%1""'
+
+Create-SubMenu -BaseKey "HKCU:\\Software\\Classes\\Directory\\Background\\shell\\cis" -CisCmd $cisCmd -IconPath $iconPath -CmdTemplate $cmdBg
+Create-SubMenu -BaseKey "HKCU:\\Software\\Classes\\Directory\\shell\\cis" -CisCmd $cisCmd -IconPath $iconPath -CmdTemplate $cmdDir
+Create-SubMenu -BaseKey "HKCU:\\Software\\Classes\\*\\shell\\cis" -CisCmd $cisCmd -IconPath $iconPath -CmdTemplate $cmdFile
+`.trim();
+
+  const psPath = path.join(appDataDir, 'install-submenu.ps1');
+  const BOM = '\ufeff';
+  fs.writeFileSync(psPath, BOM + psScript, 'utf8');
+
+  // ── 注册主菜单项：点击执行 PS 脚本创建子菜单 + 执行 WebP ──
+  function registerMainMenu(baseKey: string, cmdTemplate: string): void {
+    regAddDefault(baseKey, '🖼 转换图片 (cis)');
+    regAdd(baseKey, 'Icon', iconPath);
+    const defaultCmd = cmdTemplate.replace('%FMT%', 'webp');
+    regAddDefault(`${baseKey}\\command`,
+      `powershell.exe -ExecutionPolicy Bypass -File "${psPath}" && ${defaultCmd}`);
   }
 
-  // ── 1. 目录空白处右键 ──
+  // 1. 目录空白处
   const bgBase = 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis';
-  registerMenu(bgBase, `cmd.exe /c "${cisCmd}" -t %FMT% -p "%V"`);
+  registerMainMenu(bgBase, `cmd.exe /c "${cisCmd}" -t %FMT% -p "%V"`);
 
-  // ── 2. 目录本身右键 ──
+  // 2. 目录本身
   const dirBase = 'HKCU\\Software\\Classes\\Directory\\shell\\cis';
-  registerMenu(dirBase, `cmd.exe /c "${cisCmd}" -t %FMT% -p "%1"`);
+  registerMainMenu(dirBase, `cmd.exe /c "${cisCmd}" -t %FMT% -p "%1"`);
 
-  // ── 3. 单个文件右键（仅图片文件）──
+  // 3. 单个文件（仅图片）
   const fileBase = 'HKCU\\Software\\Classes\\*\\shell\\cis';
-  registerMenu(fileBase, `cmd.exe /c "${cisCmd}" -t %FMT% -f "%1"`);
+  registerMainMenu(fileBase, `cmd.exe /c "${cisCmd}" -t %FMT% -f "%1"`);
 
   const appliesTo =
     'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR ' +
@@ -119,35 +154,34 @@ function installContextMenu(): void {
   regAdd(fileBase, 'AppliesTo', appliesTo);
 
   console.log('✅ 右键菜单安装成功！');
-  console.log('   📁 文件夹空白处右键 → 悬停选择格式 / 点击直接转换 WebP');
-  console.log('   📁 文件夹图标上右键 → 悬停选择格式 / 点击直接转换 WebP');
-  console.log('   🖼  图片文件上右键   → 悬停选择格式 / 点击直接转换 WebP');
+  console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式选择 / 点击直接转换 WebP');
+  console.log('   🖼  图片文件上右键       → 悬停展开格式选择 / 点击直接转换 WebP');
   console.log(`   📂 输出目录: <原目录>/output/`);
-  console.log(`   图标位置: ${iconPath}`);
   console.log('\n💡 提示：如需卸载，执行 cis uninstall-menu');
 }
 
 function uninstallContextMenu(): void {
   requireWindows();
-  // 目录空白处
-  regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis');
-  regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis_jpg');
-  regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis_png');
-  regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis_avif');
-  regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis_gif');
-  // 目录本身
-  regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis');
-  regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis_jpg');
-  regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis_png');
-  regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis_avif');
-  regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis_gif');
-  // 单文件
-  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis');
-  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis_jpg');
-  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis_png');
-  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis_avif');
-  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis_gif');
-  console.log('✅ 右键菜单已卸载（目录 + 文件，所有格式）');
+
+  const bases = [
+    'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis',
+    'HKCU\\Software\\Classes\\Directory\\shell\\cis',
+    'HKCU\\Software\\Classes\\*\\shell\\cis',
+  ];
+  const suffixValues = ['', '_webp', '_jpg', '_png', '_avif', '_gif'];
+
+  for (const base of bases) {
+    for (const suffix of suffixValues) {
+      regDelete(base + suffix);
+    }
+  }
+
+  // 清理 AppData 中的脚本
+  const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
+  const psPath = path.join(appDataDir, 'install-submenu.ps1');
+  try { fs.unlinkSync(psPath); } catch { /* ignore */ }
+
+  console.log('✅ 右键菜单已卸载');
 }
 
 // ─────────────────────────────────────────
