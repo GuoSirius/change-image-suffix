@@ -78,13 +78,16 @@ function installContextMenu(): void {
   }
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
-  // ── 格式列表 ──
+  // ── 格式列表（全部支持输出格式）──
   const formats = [
-    { verb: 'webp', label: '🌀 WebP' },
-    { verb: 'jpg',  label: '📷 JPG' },
-    { verb: 'png',  label: '🖼 PNG' },
-    { verb: 'avif', label: '📺 AVIF' },
-    { verb: 'gif',  label: '🎞 GIF' },
+    { verb: 'webp',  label: '🌀 WebP' },
+    { verb: 'jpg',   label: '📷 JPG' },
+    { verb: 'png',   label: '🖼 PNG' },
+    { verb: 'avif',  label: '📺 AVIF' },
+    { verb: 'gif',   label: '🎞 GIF' },
+    { verb: 'tiff',  label: '📋 TIFF' },
+    { verb: 'heif',  label: '🍎 HEIF' },
+    { verb: 'jp2',   label: '📐 JPEG2000' },
   ];
   const verbs = formats.map(f => f.verb).join(';'); // "webp;jpg;png;avif;gif"
 
@@ -200,7 +203,7 @@ function parseArgs(): CliOptions {
     if (arg === '-h' || arg === '--help') { printHelp(); process.exit(0); }
 
     if (arg === '-v' || arg === '--version') {
-      console.log('change-image-suffix v1.9.0');
+      console.log('change-image-suffix v1.10.0');
       process.exit(0);
     }
 
