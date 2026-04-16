@@ -53,13 +53,16 @@ function regDelete(key: string): void {
 function installContextMenu(): void {
   requireWindows();
 
-  // ── 查找 cis.cmd 路径 ──
+  // ── 查找 cis.cmd 和 node_modules 路径 ──
   let cisCmd = '';
+  let nodeModulesDir = '';
   try {
     cisCmd = execSync('where cis.cmd', { encoding: 'utf8' }).trim().split('\n')[0].trim();
+    nodeModulesDir = path.dirname(cisCmd);
   } catch {
     try {
       cisCmd = execSync('where cis', { encoding: 'utf8' }).trim().split('\n')[0].trim();
+      nodeModulesDir = path.dirname(cisCmd);
     } catch {
       console.error('❌ 找不到 cis 命令，请先执行 npm link 或 npm install -g change-image-suffix');
       process.exit(1);
@@ -78,11 +81,126 @@ function installContextMenu(): void {
   }
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
+  // ── 辅助脚本路径定义（需要在 batContent 之前，因为 bat 中引用了 ps1Path）──
+  const batPath = path.join(appDataDir, 'cis_file.bat');
+  const ps1Path = path.join(appDataDir, 'cis_getfiles.ps1');
+
+  // cis_getfiles.ps1: 通过 Shell.Application COM 获取 Explorer 选中文件
+  const cisGetfilesContent = `
+Add-Type -AssemblyName Microsoft.VisualBasic
+Add-Type -AssemblyName UIAutomationClient
+$files = @()
+try {
+    $shell = New-Object -ComObject Shell.Application
+    $windows = $shell.Windows()
+    foreach ($win in $windows) {
+        if ($win -and $win.FullName -like "*explorer.exe") {
+            $selected = $win.Document.SelectedItems()
+            foreach ($item in $selected) {
+                if ($item -and $item.Path) {
+                    $files += $item.Path
+                }
+            }
+        }
+    }
+} catch {}
+if ($files.Count -gt 0) {
+    $files | ForEach-Object { $_ }
+} else {
+    Write-Output "NO_FILES"
+}
+`;
+  fs.writeFileSync(ps1Path, cisGetfilesContent, 'utf8');
+
+  // ── bat 脚本：接收 Windows 传递的文件路径和格式参数 ──
+  // 根据 Windows ExtendedSubCommandsKey 机制：
+  // - 子命令的 command 参数（格式）在前
+  // - Windows 自动将父命令收到的文件路径追加在末尾
+  // - 最终执行: cmd /c "bat" "格式" "文件路径"
+  // 移除 AppliesTo 限制后，bat 需要过滤非图片文件
+  const batContent = `@echo off
+chcp 65001 >nul
+setlocal enabledelayedexpansion
+
+REM Get cis.cmd path
+for /f "delims=" %%c in ('where cis.cmd 2^>nul') do set "CIS_CMD=%%c"
+
+REM Function: check if file is supported image format
+set "SUPPORTED_EXT=.png;.jpg;.jpeg;.gif;.bmp;.tiff;.tif;.webp;.avif"
+
+REM %1 = format (from subcommand), %2 = file path (from Windows)
+if "%~1"=="" (
+    echo Error: No format specified.
+    pause
+    goto :done
+)
+set "format=%~1"
+
+REM Process files
+if "%~2"=="" (
+    REM No file path from Windows: use PowerShell to get selected files (multi-file)
+    for /f "delims=" %%i in ('powershell -ExecutionPolicy Bypass -File "${ps1Path}" 2^>nul') do (
+        if not "%%i"=="NO_FILES" (
+            call :check_and_convert "%%i"
+        )
+    )
+) else (
+    REM Has file path: use it directly (single file from Windows)
+    call :check_and_convert "%~2"
+)
+goto :done
+
+:check_and_convert
+set "filePath=%~1"
+REM Get file extension
+for %%E in ("!filePath!") do set "ext=%%~xE"
+REM Convert to lowercase
+set "ext_lower=!ext!"
+call set "ext_lower=%%ext_lower:A=a%%
+call set "ext_lower=%%ext_lower:B=b%%
+call set "ext_lower=%%ext_lower:C=c%%
+call set "ext_lower=%%ext_lower:D=d%%
+call set "ext_lower=%%ext_lower:E=e%%
+call set "ext_lower=%%ext_lower:F=f%%
+call set "ext_lower=%%ext_lower:G=g%%
+call set "ext_lower=%%ext_lower:H=h%%
+call set "ext_lower=%%ext_lower:I=i%%
+call set "ext_lower=%%ext_lower:J=j%%
+call set "ext_lower=%%ext_lower:K=k%%
+call set "ext_lower=%%ext_lower:L=l%%
+call set "ext_lower=%%ext_lower:M=m%%
+call set "ext_lower=%%ext_lower:N=n%%
+call set "ext_lower=%%ext_lower:O=o%%
+call set "ext_lower=%%ext_lower:P=p%%
+call set "ext_lower=%%ext_lower:Q=q%%
+call set "ext_lower=%%ext_lower:R=r%%
+call set "ext_lower=%%ext_lower:S=s%%
+call set "ext_lower=%%ext_lower:T=t%%
+call set "ext_lower=%%ext_lower:U=u%%
+call set "ext_lower=%%ext_lower:V=v%%
+call set "ext_lower=%%ext_lower:W=w%%
+call set "ext_lower=%%ext_lower:X=x%%
+call set "ext_lower=%%ext_lower:Y=y%%
+call set "ext_lower=%%ext_lower:Z=z%%
+REM Check if extension is supported
+echo !SUPPORTED_EXT! | findstr /i /c:"!ext_lower!" >nul 2>&1
+if !errorlevel!==0 (
+    call !CIS_CMD! -t !format! -f "!filePath!"
+) else (
+    REM Not a supported image, skip silently
+)
+exit /b
+
+:done
+endlocal
+`;
+  fs.writeFileSync(batPath, batContent, 'utf8');
+
   // ── 格式列表（webp 排第一，其他按常见程度排序）──
   const formats = [
     { verb: 'webp', label: '🌀 WebP' },
-    { verb: 'png', label: '🖼 PNG' },
     { verb: 'jpg', label: '📷 JPG' },
+    { verb: 'png', label: '🖼 PNG' },
     { verb: 'avif', label: '📺 AVIF' },
     { verb: 'gif', label: '🎞 GIF' },
     { verb: 'tiff', label: '📋 TIFF' },
@@ -92,10 +210,12 @@ function installContextMenu(): void {
 
   // ── 使用 ExtendedSubCommandsKey 方式（PowerShell 7 同款）──
   // 主菜单项配置（每个菜单类型有独立的子菜单路径）
+  // 注意：文件右键和目录右键都使用 bat + PowerShell 获取选中文件
+  // 这样混合选择时也能处理所有选中项
   const menuBases = [
     { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
-    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', arg: '-p "%1"' },
-    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', arg: '-f %*', isFile: true },
+    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', useBat: true },
+    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', useBat: true },
   ];
 
   // 1. 注册公共子菜单（每种菜单类型独立注册）
@@ -103,10 +223,18 @@ function installContextMenu(): void {
   for (const menu of menuBases) {
     for (const fmt of formats) {
       const shellKey = `${REG_ROOT}${menu.subMenu}\\shell\\${fmt.verb}`;
-      const cmd = `"${cisCmd}" -t ${fmt.verb} ${menu.arg}`;
+      let cmd: string;
+      if ((menu as any).useBat) {
+        // 文件右键：子命令传递格式参数，Windows 自动追加文件路径
+        // 最终执行: cmd /c "bat" "格式" "文件路径"
+        cmd = `"${batPath}" ${fmt.verb}`;
+      } else {
+        cmd = `"${cisCmd}" -t ${fmt.verb} ${menu.arg}`;
+      }
       execSync(`reg add "${shellKey}" /ve /d "${fmt.label}" /f`, { stdio: 'ignore' });
       execSync(`reg add "${shellKey}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
-      execSync(`reg add "${shellKey}\\command" /ve /d "cmd /c ${cmd}" /f`, { stdio: 'ignore' });
+      // 直接调用 bat，不需要 cmd /c，Windows 会自动追加文件路径
+      execSync(`reg add "${shellKey}\\command" /ve /d "${cmd}" /f`, { stdio: 'ignore' });
     }
   }
 
@@ -116,16 +244,19 @@ function installContextMenu(): void {
     execSync(`reg add "${menu.base}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
     execSync(`reg add "${menu.base}" /v ExtendedSubCommandsKey /d "${menu.subMenu}" /f`, { stdio: 'ignore' });
 
-    // 文件右键添加 AppliesTo 限制
-    if ((menu as any).isFile) {
-      const appliesTo = 'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif';
-      execSync(`reg add "${menu.base}" /v AppliesTo /d "${appliesTo}" /f`, { stdio: 'ignore' });
+    // 使用 bat 的菜单（文件右键和目录右键）：设置 command 接收文件路径 %1
+    // Windows 会将父命令收到的 %1 自动传递给子命令
+    if ((menu as any).useBat) {
+      execSync(`reg add "${menu.base}\\command" /ve /d "cmd /c echo %1 > nul" /f`, { stdio: 'ignore' });
+      // 注意：不添加 AppliesTo 限制，让菜单始终显示
+      // bat 脚本会检查文件扩展名，自动忽略非图片文件
     }
   }
 
   console.log('✅ 右键菜单安装成功！');
   console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式子菜单');
   console.log('   🖼  图片文件上右键       → 悬停展开格式子菜单');
+  console.log('   ⚠️  非图片文件右键       → 菜单显示但不处理');
   console.log(`   📂 输出目录: <原目录>/output/`);
   console.log('\n💡 提示：如需卸载，执行 cis uninstall-menu');
 }
@@ -152,11 +283,19 @@ function uninstallContextMenu(): void {
     'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_dir',
     'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_file',
   ];
+
   for (const root of subMenuRoots) {
     try {
       execSync(`reg delete "${root}" /f`, { stdio: 'ignore' });
     } catch { /* ignore */ }
   }
+
+  // 删除批处理文件和 PowerShell 脚本
+  const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
+  const batPath = path.join(appDataDir, 'cis_file.bat');
+  const ps1Path = path.join(appDataDir, 'cis_getfiles.ps1');
+  try { fs.unlinkSync(batPath); } catch { /* ignore */ }
+  try { fs.unlinkSync(ps1Path); } catch { /* ignore */ }
 
   console.log('✅ 右键菜单已卸载');
 }
@@ -176,14 +315,21 @@ function parseArgs(): CliOptions {
     targetFormat: DEFAULT_TARGET_FORMAT,
   };
 
-  // 用于暂存多路径收集
-  let pendingPaths: string[] = [];
-  let firstPathType: 'file' | 'dir' | null = null;
+  // 用于分类收集的临时数组
+  let filesFromFlag: string[] = [];      // -f 收集的文件
+  let dirsFromFlag: string[] = [];       // -p 收集的目录
+  let positionalFiles: string[] = [];     // 位置参数中的文件
+  let positionalDirs: string[] = [];      // 位置参数中的目录
 
-  for (let i = 0; i < args.length; i++) {
+  let i = 0;
+  while (i < args.length) {
     const arg = args[i];
 
-    if (arg === '-r' || arg === '--recursive') { options.recursive = true; continue; }
+    if (arg === '-r' || arg === '--recursive') {
+      options.recursive = true;
+      i++;
+      continue;
+    }
 
     if (arg === '-d' || arg === '--depth') {
       if (i + 1 < args.length) {
@@ -193,6 +339,7 @@ function parseArgs(): CliOptions {
           process.exit(1);
         }
       }
+      i++;
       continue;
     }
 
@@ -200,6 +347,7 @@ function parseArgs(): CliOptions {
       if (i + 1 < args.length) {
         options.extensions = args[++i].split(',').map(e => e.trim().toLowerCase().replace(/^\./, ''));
       }
+      i++;
       continue;
     }
 
@@ -207,84 +355,100 @@ function parseArgs(): CliOptions {
       if (i + 1 < args.length) {
         options.targetFormat = args[++i].trim().toLowerCase().replace(/^\./, '');
       }
+      i++;
       continue;
     }
 
-    if (arg === '-h' || arg === '--help') { printHelp(); process.exit(0); }
+    if (arg === '-h' || arg === '--help') {
+      printHelp();
+      process.exit(0);
+    }
 
     if (arg === '-v' || arg === '--version') {
-      console.log('change-image-suffix v1.15.0');
+      console.log('change-image-suffix v1.18.0');
       process.exit(0);
     }
 
     if (arg === '-p' || arg === '--path') {
-      if (i + 1 < args.length) {
-        options.directory = path.resolve(args[++i]);
+      // 收集 -p 后的目录
+      const start = i + 1;
+      while (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        i++;
+        dirsFromFlag.push(path.resolve(args[i]));
       }
+      // 如果 -p 后面没有参数，用当前目录
+      if (start > i) {
+        dirsFromFlag.push(path.resolve('.'));
+      }
+      i++;
       continue;
     }
 
     if (arg === '-f' || arg === '--file') {
-      // 收集所有后续非选项参数作为文件列表
+      // 收集 -f 后的所有文件
       while (i + 1 < args.length && !args[i + 1].startsWith('-')) {
-        const filePath = path.resolve(args[++i]);
-        if (!options.multiFiles) {
-          options.multiFiles = [];
-        }
-        options.multiFiles.push(filePath);
+        i++;
+        filesFromFlag.push(path.resolve(args[i]));
       }
+      i++;
       continue;
     }
 
     if (!arg.startsWith('-')) {
-      // 位置参数：全部收集为路径
-      pendingPaths.push(path.resolve(arg));
-    }
-  }
-
-  // 处理收集到的路径
-  if (pendingPaths.length > 0) {
-    if (pendingPaths.length === 1) {
-      // 只有一个路径
-      const p = pendingPaths[0];
-      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
-        options.singleFile = p;
+      // 位置参数：根据实际类型分类
+      const resolvedPath = path.resolve(arg);
+      if (fs.existsSync(resolvedPath)) {
+        if (fs.statSync(resolvedPath).isFile()) {
+          positionalFiles.push(resolvedPath);
+        } else {
+          positionalDirs.push(resolvedPath);
+        }
       } else {
-        options.directory = p;
+        // 文件不存在但不是以 - 开头，当作文件收集（后续验证会报错）
+        positionalFiles.push(resolvedPath);
       }
-    } else {
-      // 多个路径 → 多路径模式
-      options.multiPaths = pendingPaths;
+      i++;
+      continue;
     }
+
+    // 未知选项，跳过
+    i++;
   }
 
-  // 验证单/多文件模式
-  if (options.multiFiles && options.multiFiles.length > 0) {
-    for (const f of options.multiFiles) {
-      if (!fs.existsSync(f)) {
-        console.error(`❌ 文件不存在: ${f}`);
-        process.exit(1);
-      }
-      if (!fs.statSync(f).isFile()) {
-        console.error(`❌ 路径不是文件: ${f}`);
-        process.exit(1);
-      }
+  // ─── 合并所有收集的内容 ───
+
+  // 合并文件：-f 收集的 + 位置参数中的文件
+  const allFiles = [...filesFromFlag, ...positionalFiles];
+
+  // 合并目录：-p 收集的 + 位置参数中的目录
+  const allDirs = [...dirsFromFlag, ...positionalDirs];
+
+  // ─── 确定最终模式 ───
+
+  // 情况1：只有文件（单文件/多文件模式）
+  if (allFiles.length > 0 && allDirs.length === 0) {
+    options.multiFiles = allFiles;
+    return options;
+  }
+
+  // 情况2：只有目录（单目录/多目录模式）
+  if (allDirs.length > 0 && allFiles.length === 0) {
+    if (allDirs.length === 1) {
+      options.directory = allDirs[0];
+    } else {
+      options.multiPaths = allDirs;
     }
     return options;
   }
 
-  // 验证目录模式（单目录或多路径）
-  if (!options.multiPaths) {
-    if (!fs.existsSync(options.directory)) {
-      console.error(`❌ 目录不存在: ${options.directory}`);
-      process.exit(1);
-    }
-    if (!fs.statSync(options.directory).isDirectory()) {
-      console.error(`❌ 路径不是目录: ${options.directory}`);
-      process.exit(1);
-    }
+  // 情况3：文件和目录混合（混合模式）
+  if (allFiles.length > 0 && allDirs.length > 0) {
+    options.multiFiles = allFiles;
+    options.multiPaths = allDirs;
+    return options;
   }
 
+  // 情况4：没有任何路径参数，使用当前目录
   return options;
 }
 
@@ -313,8 +477,8 @@ function printHelp(): void {
   cis -f ./photo.png               # 转换单个文件
   cis -p ./images                  # 转换指定目录
   cis -r                           # 递归转换当前目录
-  cis -r -d 2 -p ./images          # 递归转换，深度限制为2
-  cis -e png,jpg -t jpg            # png/jpg 转换为 jpg
+  cis -r -d 2 -p ./images         # 递归转换，深度限制为2
+  cis -e png,jpg -t jpg           # png/jpg 转换为 jpg
   cis install-menu                 # 注册 Windows 右键菜单
 `);
 }
@@ -459,10 +623,9 @@ async function main(): Promise<void> {
 
   const options = parseArgs();
 
-  // ─── 单/多文件模式 ───
-  if (options.multiFiles && options.multiFiles.length > 0) {
-    const files = options.multiFiles;
-    console.log(`\n🖼️  change-image-suffix - 图片转换工具\n`);
+  // ─── 辅助函数：处理文件列表 ───
+  async function processFiles(files: string[], title: string): Promise<{ success: number; fail: number }> {
+    console.log(`\n🖼️  change-image-suffix - ${title}\n`);
     console.log(`🎯 目标格式: ${options.targetFormat}`);
     console.log(`📦 待处理: ${files.length} 个文件\n`);
     console.log('----------------------------------------\n');
@@ -492,22 +655,19 @@ async function main(): Promise<void> {
       }
     }
 
-    console.log('\n----------------------------------------\n');
-    console.log(`📊 转换完成！成功: ${totalSuccess}, 失败: ${totalFail}\n`);
-    return;
+    return { success: totalSuccess, fail: totalFail };
   }
 
-  // ─── 多路径模式 ───
-  if (options.multiPaths) {
-    console.log(`\n🖼️  change-image-suffix - 批量转换工具\n`);
-    console.log(`🎯 目标格式: ${options.targetFormat}`);
-    console.log(`📦 待处理: ${options.multiPaths.length} 个路径\n`);
+  // ─── 辅助函数：处理目录列表 ───
+  async function processDirs(dirs: string[]): Promise<{ success: number; fail: number }> {
+    console.log(`\n🎯 目标格式: ${options.targetFormat}`);
+    console.log(`📦 待处理: ${dirs.length} 个目录\n`);
     console.log('----------------------------------------\n');
 
     let totalSuccess = 0;
     let totalFail = 0;
 
-    for (const inputPath of options.multiPaths) {
+    for (const inputPath of dirs) {
       const stat = fs.existsSync(inputPath) ? fs.statSync(inputPath) : null;
 
       if (!stat) {
@@ -517,7 +677,6 @@ async function main(): Promise<void> {
       }
 
       if (stat.isFile()) {
-        // 文件：输出到其所在目录的 output/
         const ext = path.extname(inputPath).slice(1).toLowerCase();
         const supportedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'avif'];
         if (!supportedExts.includes(ext)) {
@@ -537,7 +696,6 @@ async function main(): Promise<void> {
           totalFail++;
         }
       } else {
-        // 目录：输出到该目录的 output/
         const files = getAllFiles(inputPath, options.extensions, options.recursive, 0, options.maxDepth);
         console.log(`  📁 目录: ${inputPath} (${files.length} 个文件)`);
 
@@ -558,11 +716,36 @@ async function main(): Promise<void> {
           }
         }
       }
-      console.log('');
     }
 
-    console.log('----------------------------------------');
-    console.log(`\n📊 转换完成！成功: ${totalSuccess}, 失败: ${totalFail}\n`);
+    return { success: totalSuccess, fail: totalFail };
+  }
+
+  // ─── 混合模式：同时有文件和目录 ───
+  if (options.multiFiles && options.multiFiles.length > 0 && options.multiPaths && options.multiPaths.length > 0) {
+    console.log('\n🖼️  change-image-suffix - 混合模式（文件+目录）\n');
+    const fileResult = await processFiles(options.multiFiles, '图片转换工具');
+    console.log('\n');
+    const dirResult = await processDirs(options.multiPaths);
+    console.log('\n----------------------------------------');
+    console.log(`📊 转换完成！成功: ${fileResult.success + dirResult.success}, 失败: ${fileResult.fail + dirResult.fail}\n`);
+    return;
+  }
+
+  // ─── 单/多文件模式 ───
+  if (options.multiFiles && options.multiFiles.length > 0) {
+    const result = await processFiles(options.multiFiles, '图片转换工具');
+    console.log('\n----------------------------------------\n');
+    console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
+    return;
+  }
+
+  // ─── 多路径模式 ───
+  if (options.multiPaths) {
+    console.log(`\n🖼️  change-image-suffix - 批量转换工具\n`);
+    const result = await processDirs(options.multiPaths);
+    console.log('\n----------------------------------------');
+    console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
     return;
   }
 
