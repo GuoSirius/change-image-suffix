@@ -331,7 +331,7 @@ function getOutputPath(
   const targetExt = targetFormat;
 
   // 源格式与目标格式相同时，直接覆盖
-  const coreName = basename;
+  let coreName = basename;
 
   const outputDir = path.join(dir, 'output');
 
