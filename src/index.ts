@@ -87,42 +87,43 @@ function installContextMenu(): void {
   ];
 
   /**
-   * 注册一个级联菜单主项 + 多个格式子项
-   * @param baseKey 注册表根键，如 "HKCU\Software\Classes\Directory\Background\shell\cis"
-   * @param mainLabel 主菜单显示文字
-   * @param cmdTemplate 命令模板，%V 被替换为路径参数
+   * 注册右键菜单：主项直接执行 WebP + 格式子菜单
+   * @param baseKey   注册表根键
+   * @param mainLabel 主菜单文字（直接执行 WebP）
+   * @param cmdTemplate 命令模板（%FMT% → 格式，%V% → 路径）
    */
-  function registerCascadeMenu(baseKey: string, mainLabel: string, cmdTemplate: string): void {
-    // 主项（留空 command，这样 Shell 会显示为菜单而不是直接执行）
+  function registerMenu(baseKey: string, mainLabel: string, cmdTemplate: string): void {
+    // 主项：点击直接执行 WebP（默认格式）
     regAddDefault(baseKey, mainLabel);
     regAdd(baseKey, 'Icon', iconPath);
-    // 设置为级联菜单：留空 (默认) 或用 MUIVerb
+    const mainCmd = cmdTemplate.replace('%FMT%', 'webp');
+    regAddDefault(`${baseKey}\\command`, mainCmd);
+
+    // SubCommands 空值 = Windows 级联菜单，hover 展开
     regAdd(baseKey, 'SubCommands', '');
 
-    // 为每种格式创建子项，Shell 会自动将 \shell 下的子项渲染为级联菜单
+    // 格式子项（hover 时显示，点击执行对应格式）
     for (const fmt of formats) {
       const subKey = `${baseKey}\\shell\\fmt_${fmt.value}`;
-      regAddDefault(subKey, `转换为 ${fmt.label}`);
+      regAddDefault(subKey, fmt.label);
       regAdd(subKey, 'Icon', iconPath);
-      const subCmdKey = `${subKey}\\command`;
       const subCmd = cmdTemplate.replace('%FMT%', fmt.value);
-      regAddDefault(subCmdKey, subCmd);
+      regAddDefault(`${subKey}\\command`, subCmd);
     }
   }
 
-  // ── 1. 目录空白处右键（Directory\Background）──
+  // ── 1. 目录空白处右键 ──
   const bgBase = 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis';
-  registerCascadeMenu(bgBase, '🖼 转换图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -p "%V" & pause`);
+  registerMenu(bgBase, '🖼 转换图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -p "%V"`);
 
-  // ── 2. 目录本身右键（Directory）──
+  // ── 2. 目录本身右键 ──
   const dirBase = 'HKCU\\Software\\Classes\\Directory\\shell\\cis';
-  registerCascadeMenu(dirBase, '🖼 转换图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -p "%1" & pause`);
+  registerMenu(dirBase, '🖼 转换图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -p "%1"`);
 
-  // ── 3. 单个文件右键（*\shell\cis）──
+  // ── 3. 单个文件右键（仅图片文件）──
   const fileBase = 'HKCU\\Software\\Classes\\*\\shell\\cis';
-  registerCascadeMenu(fileBase, '🖼 转换此图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -f "%1" & pause`);
+  registerMenu(fileBase, '🖼 转换此图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -f "%1"`);
 
-  // 为文件右键添加 AppliesTo 过滤器（仅图片文件显示）
   const appliesTo =
     'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR ' +
     'System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR ' +
@@ -130,9 +131,10 @@ function installContextMenu(): void {
   regAdd(fileBase, 'AppliesTo', appliesTo);
 
   console.log('✅ 右键菜单安装成功！');
-  console.log('   📁 文件夹空白处右键 → 选择格式转换整个目录的图片');
-  console.log('   📁 文件夹图标上右键 → 选择格式转换该文件夹的图片');
-  console.log('   🖼️  图片文件上右键   → 选择格式转换该单个图片');
+  console.log('   📁 文件夹空白处右键 → 悬停选择格式 / 点击直接转换 WebP');
+  console.log('   📁 文件夹图标上右键 → 悬停选择格式 / 点击直接转换 WebP');
+  console.log('   🖼  图片文件上右键   → 悬停选择格式 / 点击直接转换 WebP');
+  console.log(`   📂 输出目录: <原目录>/output/`);
   console.log(`   图标位置: ${iconPath}`);
   console.log('\n💡 提示：如需卸载，执行 cis uninstall-menu');
 }
@@ -192,7 +194,7 @@ function parseArgs(): CliOptions {
     if (arg === '-h' || arg === '--help') { printHelp(); process.exit(0); }
 
     if (arg === '-v' || arg === '--version') {
-      console.log('change-image-suffix v1.4.0');
+      console.log('change-image-suffix v1.5.0');
       process.exit(0);
     }
 
@@ -314,34 +316,21 @@ function getAllFiles(
   return files;
 }
 
-function generateNewFilename(originalPath: string, targetFormat: string): string {
-  const dir = path.dirname(originalPath);
-  const ext = path.extname(originalPath);
-  const basename = path.basename(originalPath, ext);
+function getOutputPath(inputPath: string, targetFormat: string): string {
+  const dir = path.dirname(inputPath);
+  const ext = path.extname(inputPath);
+  const basename = path.basename(inputPath, ext);
+
+  // 源格式与目标格式相同时，保留 .原格式.webp 这种双重后缀
   const originalExt = ext.slice(1).toLowerCase();
+  const targetExt = targetFormat;
+  const filename = originalExt === targetExt
+    ? `${basename}.${originalExt}.${targetExt}`
+    : `${basename}.${targetExt}`;
 
-  if (originalExt === targetFormat) {
-    return path.join(dir, `${basename}.${originalExt}.${targetFormat}`);
-  }
-  return path.join(dir, `${basename}.${targetFormat}`);
-}
-
-function ensureUniqueFilename(filepath: string): string {
-  if (!fs.existsSync(filepath)) return filepath;
-
-  const dir = path.dirname(filepath);
-  const ext = path.extname(filepath);
-  const basename = path.basename(filepath, ext);
-
-  let counter = 1;
-  let newPath = filepath;
-
-  while (fs.existsSync(newPath)) {
-    newPath = path.join(dir, `${basename}_${counter}${ext}`);
-    counter++;
-  }
-
-  return newPath;
+  // 输出到同级 output 子目录
+  const outputDir = path.join(dir, 'output');
+  return path.join(outputDir, filename);
 }
 
 async function convertImage(
@@ -349,24 +338,29 @@ async function convertImage(
   targetFormat: string
 ): Promise<{ success: boolean; outputPath: string; error?: string }> {
   try {
-    const outputPath = generateNewFilename(inputPath, targetFormat);
-    const uniqueOutputPath = ensureUniqueFilename(outputPath);
+    const outputPath = getOutputPath(inputPath, targetFormat);
+
+    // 确保 output 目录存在
+    const outputDir = path.dirname(outputPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
 
     const image = sharp(inputPath);
 
     switch (targetFormat.toLowerCase()) {
-      case 'webp': await image.webp({ quality: 85 }).toFile(uniqueOutputPath); break;
+      case 'webp': await image.webp({ quality: 85 }).toFile(outputPath); break;
       case 'jpg':
-      case 'jpeg': await image.jpeg({ quality: 85 }).toFile(uniqueOutputPath); break;
-      case 'png':  await image.png({ quality: 85 }).toFile(uniqueOutputPath); break;
-      case 'gif':  await image.gif().toFile(uniqueOutputPath); break;
+      case 'jpeg': await image.jpeg({ quality: 85 }).toFile(outputPath); break;
+      case 'png':  await image.png({ quality: 85 }).toFile(outputPath); break;
+      case 'gif':  await image.gif().toFile(outputPath); break;
       case 'tiff':
-      case 'tif':  await image.tiff({ quality: 85 }).toFile(uniqueOutputPath); break;
-      case 'avif': await image.avif({ quality: 85 }).toFile(uniqueOutputPath); break;
-      default:     await image.toFormat(targetFormat as any).toFile(uniqueOutputPath);
+      case 'tif':  await image.tiff({ quality: 85 }).toFile(outputPath); break;
+      case 'avif': await image.avif({ quality: 85 }).toFile(outputPath); break;
+      default:     await image.toFormat(targetFormat as any).toFile(outputPath);
     }
 
-    return { success: true, outputPath: uniqueOutputPath };
+    return { success: true, outputPath };
   } catch (err) {
     return {
       success: false,
