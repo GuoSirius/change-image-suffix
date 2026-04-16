@@ -71,47 +71,68 @@ function installContextMenu(): void {
     fs.mkdirSync(appDataDir, { recursive: true });
   }
   const icoTarget = path.join(appDataDir, 'icon.ico');
-  // ICO 文件随包一起发布，在 assets/icon.ico
   const icoSource = path.join(__dirname, '..', 'assets', 'icon.ico');
   if (fs.existsSync(icoSource)) {
     fs.copyFileSync(icoSource, icoTarget);
   }
-
-  // Windows cmd 运行 .cmd 脚本需要用 cmd /c
-  const runner = `cmd.exe /c "${cisCmd}" -p "%V" & pause`;
-  // 图标路径（若 ICO 复制成功则用它，否则回退到 cisCmd）
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
+
+  // ── 格式子菜单配置 ──
+  const formats = [
+    { label: 'WebP', value: 'webp' },
+    { label: 'JPG', value: 'jpg' },
+    { label: 'PNG', value: 'png' },
+    { label: 'AVIF', value: 'avif' },
+    { label: 'GIF', value: 'gif' },
+  ];
+
+  /**
+   * 注册一个级联菜单主项 + 多个格式子项
+   * @param baseKey 注册表根键，如 "HKCU\Software\Classes\Directory\Background\shell\cis"
+   * @param mainLabel 主菜单显示文字
+   * @param cmdTemplate 命令模板，%V 被替换为路径参数
+   */
+  function registerCascadeMenu(baseKey: string, mainLabel: string, cmdTemplate: string): void {
+    // 主项（留空 command，这样 Shell 会显示为菜单而不是直接执行）
+    regAddDefault(baseKey, mainLabel);
+    regAdd(baseKey, 'Icon', iconPath);
+    // 设置为级联菜单：留空 (默认) 或用 MUIVerb
+    regAdd(baseKey, 'SubCommands', '');
+
+    // 为每种格式创建子项，Shell 会自动将 \shell 下的子项渲染为级联菜单
+    for (const fmt of formats) {
+      const subKey = `${baseKey}\\shell\\fmt_${fmt.value}`;
+      regAddDefault(subKey, `转换为 ${fmt.label}`);
+      regAdd(subKey, 'Icon', iconPath);
+      const subCmdKey = `${subKey}\\command`;
+      const subCmd = cmdTemplate.replace('%FMT%', fmt.value);
+      regAddDefault(subCmdKey, subCmd);
+    }
+  }
 
   // ── 1. 目录空白处右键（Directory\Background）──
   const bgBase = 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis';
-  regAddDefault(bgBase, '转换图片为 WebP (cis)');
-  regAdd(bgBase, 'Icon', iconPath);
-  const bgCmd = bgBase + '\\command';
-  regAddDefault(bgCmd, runner);
+  registerCascadeMenu(bgBase, '🖼 转换图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -p "%V" & pause`);
 
   // ── 2. 目录本身右键（Directory）──
   const dirBase = 'HKCU\\Software\\Classes\\Directory\\shell\\cis';
-  regAddDefault(dirBase, '转换图片为 WebP (cis)');
-  regAdd(dirBase, 'Icon', iconPath);
-  const dirCmd = dirBase + '\\command';
-  regAddDefault(dirCmd, `cmd.exe /c "${cisCmd}" -p "%1" & pause`);
+  registerCascadeMenu(dirBase, '🖼 转换图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -p "%1" & pause`);
 
   // ── 3. 单个文件右键（*\shell\cis）──
   const fileBase = 'HKCU\\Software\\Classes\\*\\shell\\cis';
-  regAddDefault(fileBase, '转换此图片为 WebP (cis)');
-  regAdd(fileBase, 'Icon', iconPath);
-  // 限制仅图片文件类型显示（AppliesTo 过滤器）
-  regAdd(fileBase, 'AppliesTo',
+  registerCascadeMenu(fileBase, '🖼 转换此图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -f "%1" & pause`);
+
+  // 为文件右键添加 AppliesTo 过滤器（仅图片文件显示）
+  const appliesTo =
     'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR ' +
     'System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR ' +
-    'System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif');
-  const fileCmd = fileBase + '\\command';
-  regAddDefault(fileCmd, `cmd.exe /c "${cisCmd}" -f "%1" & pause`);
+    'System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif';
+  regAdd(fileBase, 'AppliesTo', appliesTo);
 
   console.log('✅ 右键菜单安装成功！');
-  console.log('   📁 文件夹空白处右键 → 转换整个目录的图片');
-  console.log('   📁 文件夹图标上右键 → 转换该文件夹的图片');
-  console.log('   🖼️  图片文件上右键   → 转换该单个图片');
+  console.log('   📁 文件夹空白处右键 → 选择格式转换整个目录的图片');
+  console.log('   📁 文件夹图标上右键 → 选择格式转换该文件夹的图片');
+  console.log('   🖼️  图片文件上右键   → 选择格式转换该单个图片');
   console.log(`   图标位置: ${iconPath}`);
   console.log('\n💡 提示：如需卸载，执行 cis uninstall-menu');
 }
@@ -171,7 +192,7 @@ function parseArgs(): CliOptions {
     if (arg === '-h' || arg === '--help') { printHelp(); process.exit(0); }
 
     if (arg === '-v' || arg === '--version') {
-      console.log('change-image-suffix v1.3.0');
+      console.log('change-image-suffix v1.4.0');
       process.exit(0);
     }
 
