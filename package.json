@@ -1,6 +1,6 @@
 {
   "name": "change-image-suffix",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "批量转换图片格式的CLI工具，支持递归搜索、深度限制、指定后缀、Windows右键菜单等功能",
   "main": "dist/index.js",
   "files": [

@@ -77,52 +77,40 @@ function installContextMenu(): void {
   }
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
-  // ── 格式子菜单配置 ──
+  // ── 格式列表（直接注册为独立菜单项，点击即执行） ──
   const formats = [
-    { label: 'WebP', value: 'webp' },
-    { label: 'JPG', value: 'jpg' },
-    { label: 'PNG', value: 'png' },
-    { label: 'AVIF', value: 'avif' },
-    { label: 'GIF', value: 'gif' },
+    { label: '🌀 WebP', value: 'webp' },
+    { label: '📷 JPG', value: 'jpg' },
+    { label: '🖼 PNG', value: 'png' },
+    { label: '📺 AVIF', value: 'avif' },
+    { label: '🎞 GIF', value: 'gif' },
   ];
 
   /**
-   * 注册右键菜单：主项直接执行 WebP + 格式子菜单
-   * @param baseKey   注册表根键
-   * @param mainLabel 主菜单文字（直接执行 WebP）
-   * @param cmdTemplate 命令模板（%FMT% → 格式，%V% → 路径）
+   * 为每种格式注册独立菜单项，点击即执行该格式
+   * 第一个格式（WebP）作为主项，其他作为独立项
    */
-  function registerMenu(baseKey: string, mainLabel: string, cmdTemplate: string): void {
-    // 主项：点击直接执行 WebP（默认格式）
-    regAddDefault(baseKey, mainLabel);
-    regAdd(baseKey, 'Icon', iconPath);
-    const mainCmd = cmdTemplate.replace('%FMT%', 'webp');
-    regAddDefault(`${baseKey}\\command`, mainCmd);
-
-    // SubCommands 空值 = Windows 级联菜单，hover 展开
-    regAdd(baseKey, 'SubCommands', '');
-
-    // 格式子项（hover 时显示，点击执行对应格式）
-    for (const fmt of formats) {
-      const subKey = `${baseKey}\\shell\\fmt_${fmt.value}`;
-      regAddDefault(subKey, fmt.label);
-      regAdd(subKey, 'Icon', iconPath);
-      const subCmd = cmdTemplate.replace('%FMT%', fmt.value);
-      regAddDefault(`${subKey}\\command`, subCmd);
-    }
+  function registerMenu(baseKey: string, cmdTemplate: string): void {
+    formats.forEach((fmt, index) => {
+      const key = index === 0 ? baseKey : `${baseKey}_${fmt.value}`;
+      regAddDefault(key, fmt.label);
+      regAdd(key, 'Icon', iconPath);
+      const cmd = cmdTemplate.replace('%FMT%', fmt.value);
+      regAddDefault(`${key}\\command`, cmd);
+    });
   }
 
   // ── 1. 目录空白处右键 ──
   const bgBase = 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis';
-  registerMenu(bgBase, '🖼 转换图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -p "%V"`);
+  registerMenu(bgBase, `cmd.exe /c "${cisCmd}" -t %FMT% -p "%V"`);
 
   // ── 2. 目录本身右键 ──
   const dirBase = 'HKCU\\Software\\Classes\\Directory\\shell\\cis';
-  registerMenu(dirBase, '🖼 转换图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -p "%1"`);
+  registerMenu(dirBase, `cmd.exe /c "${cisCmd}" -t %FMT% -p "%1"`);
 
   // ── 3. 单个文件右键（仅图片文件）──
   const fileBase = 'HKCU\\Software\\Classes\\*\\shell\\cis';
-  registerMenu(fileBase, '🖼 转换此图片 (cis)', `cmd.exe /c "${cisCmd}" -t %FMT% -f "%1"`);
+  registerMenu(fileBase, `cmd.exe /c "${cisCmd}" -t %FMT% -f "%1"`);
 
   const appliesTo =
     'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR ' +
@@ -141,10 +129,25 @@ function installContextMenu(): void {
 
 function uninstallContextMenu(): void {
   requireWindows();
+  // 目录空白处
   regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis');
+  regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis_jpg');
+  regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis_png');
+  regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis_avif');
+  regDelete('HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis_gif');
+  // 目录本身
   regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis');
+  regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis_jpg');
+  regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis_png');
+  regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis_avif');
+  regDelete('HKCU\\Software\\Classes\\Directory\\shell\\cis_gif');
+  // 单文件
   regDelete('HKCU\\Software\\Classes\\*\\shell\\cis');
-  console.log('✅ 右键菜单已卸载（目录 + 文件）');
+  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis_jpg');
+  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis_png');
+  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis_avif');
+  regDelete('HKCU\\Software\\Classes\\*\\shell\\cis_gif');
+  console.log('✅ 右键菜单已卸载（目录 + 文件，所有格式）');
 }
 
 // ─────────────────────────────────────────
@@ -194,7 +197,7 @@ function parseArgs(): CliOptions {
     if (arg === '-h' || arg === '--help') { printHelp(); process.exit(0); }
 
     if (arg === '-v' || arg === '--version') {
-      console.log('change-image-suffix v1.5.0');
+      console.log('change-image-suffix v1.6.0');
       process.exit(0);
     }
 
@@ -316,29 +319,61 @@ function getAllFiles(
   return files;
 }
 
-function getOutputPath(inputPath: string, targetFormat: string): string {
+function getOutputPath(
+  inputPath: string,
+  targetFormat: string,
+  allInputFiles: string[]
+): string {
   const dir = path.dirname(inputPath);
   const ext = path.extname(inputPath);
   const basename = path.basename(inputPath, ext);
-
-  // 源格式与目标格式相同时，保留 .原格式.webp 这种双重后缀
   const originalExt = ext.slice(1).toLowerCase();
   const targetExt = targetFormat;
-  const filename = originalExt === targetExt
-    ? `${basename}.${originalExt}.${targetExt}`
-    : `${basename}.${targetExt}`;
 
-  // 输出到同级 output 子目录
+  // 源格式与目标格式相同时，保留双重后缀
+  let coreName = originalExt === targetExt
+    ? `${basename}.${originalExt}`
+    : basename;
+
   const outputDir = path.join(dir, 'output');
+
+  // 检查输入目录中是否有同名（不含扩展名）但不同后缀的文件
+  // 如 photo.png 和 photo.jpg 会被判定为同名冲突
+  const hasNameConflict = allInputFiles.some(f => {
+    if (f === inputPath) return false;
+    const fDir = path.dirname(f);
+    const fExt = path.extname(f);
+    const fBasename = path.basename(f, fExt);
+    return fDir === dir && fBasename === basename && fExt.toLowerCase() !== ext.toLowerCase();
+  });
+
+  if (hasNameConflict) {
+    // 找所有同basename的文件的序号
+    const allBasenameMatches = allInputFiles.filter(f => {
+      if (f === inputPath) return false;
+      const fDir = path.dirname(f);
+      const fExt = path.extname(f);
+      const fBasename = path.basename(f, fExt);
+      return fDir === dir && fBasename === basename;
+    });
+    // 当前文件在所有同名文件中的索引（从1开始）
+    const sortedMatches = [...allBasenameMatches, inputPath].sort();
+    const index = sortedMatches.indexOf(inputPath) + 1;
+    const padded = String(index).padStart(2, '0');
+    coreName = `${basename}_${padded}`;
+  }
+
+  const filename = `${coreName}.${targetExt}`;
   return path.join(outputDir, filename);
 }
 
 async function convertImage(
   inputPath: string,
-  targetFormat: string
+  targetFormat: string,
+  allInputFiles: string[]
 ): Promise<{ success: boolean; outputPath: string; error?: string }> {
   try {
-    const outputPath = getOutputPath(inputPath, targetFormat);
+    const outputPath = getOutputPath(inputPath, targetFormat, allInputFiles);
 
     // 确保 output 目录存在
     const outputDir = path.dirname(outputPath);
@@ -409,7 +444,7 @@ async function main(): Promise<void> {
     }
 
     process.stdout.write(`  处理中: ${path.basename(filePath)} ... `);
-    const result = await convertImage(filePath, options.targetFormat);
+    const result = await convertImage(filePath, options.targetFormat, [filePath]);
 
     if (result.success) {
       console.log(`✅ -> ${path.basename(result.outputPath)}`);
@@ -446,7 +481,7 @@ async function main(): Promise<void> {
     const relativePath = path.relative(options.directory, file);
     process.stdout.write(`  处理中: ${relativePath} ... `);
 
-    const result = await convertImage(file, options.targetFormat);
+    const result = await convertImage(file, options.targetFormat, files);
 
     if (result.success) {
       const outputRelativePath = path.relative(options.directory, result.outputPath);
