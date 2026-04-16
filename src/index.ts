@@ -109,17 +109,20 @@ function installContextMenu(): void {
     });
   }
 
+  // 对路径中的双引号进行 cmd.exe 转义（用 ^" 代替 "）
+  const escapedCisCmd = cisCmd.replace(/"/g, '^"');
+
   // 1. 目录空白处右键
   const bgBase = 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis';
-  registerMenu(bgBase, `cmd.exe /c "chcp 65001 >nul && "${cisCmd}" -t %FMT% -p "%V""`);
+  registerMenu(bgBase, `cmd.exe /c "chcp 65001 >nul && "${escapedCisCmd}" -t %FMT% -p "%V""`);
 
   // 2. 目录图标上右键
   const dirBase = 'HKCU\\Software\\Classes\\Directory\\shell\\cis';
-  registerMenu(dirBase, `cmd.exe /c "chcp 65001 >nul && "${cisCmd}" -t %FMT% -p "%1""`);
+  registerMenu(dirBase, `cmd.exe /c "chcp 65001 >nul && "${escapedCisCmd}" -t %FMT% -p "%1""`);
 
   // 3. 文件上右键（仅图片文件）
   const fileBase = 'HKCU\\Software\\Classes\\*\\shell\\cis';
-  registerMenu(fileBase, `cmd.exe /c "chcp 65001 >nul && "${cisCmd}" -t %FMT% -f "%1""`);
+  registerMenu(fileBase, `cmd.exe /c "chcp 65001 >nul && "${escapedCisCmd}" -t %FMT% -f "%1""`);
   const appliesTo =
     'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR ' +
     'System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR ' +
