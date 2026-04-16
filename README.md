@@ -46,6 +46,8 @@ cis -r
 | 转换为 jpg 格式 | `cis -t jpg` |
 | 转换为 avif（更小体积） | `cis -t avif` |
 | 单个文件转换 | `cis -f ./banner.png` |
+| 多文件批量转换 | `cis -f ./a.png ./b.jpg ./c.gif` |
+| 多选文件/目录混合 | `cis file1.png dir1 file2.jpg` |
 | 显示帮助 | `cis --help` |
 
 ### Windows 右键菜单

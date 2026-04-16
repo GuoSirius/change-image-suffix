@@ -16,8 +16,8 @@ interface CliOptions {
   maxDepth: number;
   extensions: string[];
   targetFormat: string;
-  singleFile?: string;   // 单文件模式
-  multiPaths?: string[]; // 多路径模式（多选文件/目录）
+  multiFiles?: string[];  // 多文件模式（多选文件）
+  multiPaths?: string[];   // 多路径模式（多选文件/目录混合）
 }
 
 // ─────────────────────────────────────────
@@ -95,7 +95,7 @@ function installContextMenu(): void {
   const menuBases = [
     { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
     { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', arg: '-p "%1"' },
-    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', arg: '-f "%1"', isFile: true },
+    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', arg: '-f %*', isFile: true },
   ];
 
   // 1. 注册公共子菜单（每种菜单类型独立注册）
@@ -225,8 +225,13 @@ function parseArgs(): CliOptions {
     }
 
     if (arg === '-f' || arg === '--file') {
-      if (i + 1 < args.length) {
-        options.singleFile = path.resolve(args[++i]);
+      // 收集所有后续非选项参数作为文件列表
+      while (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        const filePath = path.resolve(args[++i]);
+        if (!options.multiFiles) {
+          options.multiFiles = [];
+        }
+        options.multiFiles.push(filePath);
       }
       continue;
     }
@@ -253,15 +258,17 @@ function parseArgs(): CliOptions {
     }
   }
 
-  // 验证单文件模式
-  if (options.singleFile) {
-    if (!fs.existsSync(options.singleFile)) {
-      console.error(`❌ 文件不存在: ${options.singleFile}`);
-      process.exit(1);
-    }
-    if (!fs.statSync(options.singleFile).isFile()) {
-      console.error(`❌ 路径不是文件: ${options.singleFile}`);
-      process.exit(1);
+  // 验证单/多文件模式
+  if (options.multiFiles && options.multiFiles.length > 0) {
+    for (const f of options.multiFiles) {
+      if (!fs.existsSync(f)) {
+        console.error(`❌ 文件不存在: ${f}`);
+        process.exit(1);
+      }
+      if (!fs.statSync(f).isFile()) {
+        console.error(`❌ 路径不是文件: ${f}`);
+        process.exit(1);
+      }
     }
     return options;
   }
@@ -452,33 +459,41 @@ async function main(): Promise<void> {
 
   const options = parseArgs();
 
-  // ─── 单文件模式 ───
-  if (options.singleFile) {
-    const filePath = options.singleFile;
-    const ext = path.extname(filePath).slice(1).toLowerCase();
-
-    console.log(`📄 文件: ${filePath}`);
+  // ─── 单/多文件模式 ───
+  if (options.multiFiles && options.multiFiles.length > 0) {
+    const files = options.multiFiles;
+    console.log(`\n🖼️  change-image-suffix - 图片转换工具\n`);
     console.log(`🎯 目标格式: ${options.targetFormat}`);
-    console.log('\n----------------------------------------\n');
+    console.log(`📦 待处理: ${files.length} 个文件\n`);
+    console.log('----------------------------------------\n');
 
     const supportedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'avif'];
-    if (!supportedExts.includes(ext)) {
-      console.error(`❌ 不支持的文件格式: .${ext}`);
-      console.error(`   支持的格式: ${supportedExts.join(', ')}`);
-      process.exit(1);
+    let totalSuccess = 0;
+    let totalFail = 0;
+
+    for (const filePath of files) {
+      const ext = path.extname(filePath).slice(1).toLowerCase();
+      if (!supportedExts.includes(ext)) {
+        console.log(`  ⚠️  跳过（不支持格式）: ${filePath}`);
+        totalFail++;
+        continue;
+      }
+
+      console.log(`  📄 文件: ${filePath}`);
+      process.stdout.write(`     处理中: ${path.basename(filePath)} ... `);
+      const result = await convertImage(filePath, options.targetFormat, [filePath]);
+
+      if (result.success) {
+        console.log(`✅ -> ${path.relative(path.dirname(filePath), result.outputPath)}`);
+        totalSuccess++;
+      } else {
+        console.log(`❌ 失败 (${result.error})`);
+        totalFail++;
+      }
     }
 
-    process.stdout.write(`  处理中: ${path.basename(filePath)} ... `);
-    const result = await convertImage(filePath, options.targetFormat, [filePath]);
-
-    if (result.success) {
-      console.log(`✅ -> ${path.basename(result.outputPath)}`);
-      console.log(`\n   输出文件: ${result.outputPath}`);
-      console.log('\n✅ 转换完成！\n');
-    } else {
-      console.log(`❌ 失败 (${result.error})`);
-      process.exit(1);
-    }
+    console.log('\n----------------------------------------\n');
+    console.log(`📊 转换完成！成功: ${totalSuccess}, 失败: ${totalFail}\n`);
     return;
   }
 
