@@ -90,55 +90,67 @@ function installContextMenu(): void {
     { verb: 'jp2', label: '📐 JPEG2000' },
   ];
 
-  // ── 生成 .reg 文件 ──
+  // ── 菜单配置 ──
   const menuBases = [
-    { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', arg: '-p "%V"' },
-    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', arg: '-p "%1"' },
-    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', arg: '-f "%1"' },
+    { base: 'HKCU:\\Software\\Classes\\Directory\\Background\\shell\\cis', arg: '-p "%V"' },
+    { base: 'HKCU:\\Software\\Classes\\Directory\\shell\\cis', arg: '-p "%1"' },
+    { base: 'HKCU:\\Software\\Classes\\*\\shell\\cis', arg: '-f "%1"' },
   ];
 
-  // 转义 reg 文件中的特殊字符
-  const escapeReg = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '""');
+  // ── 生成 PowerShell 脚本 ──
+  // 使用 PowerShell 脚本创建注册表项，避免引号转义问题
+  const menuLabel = '🖼 转换图片 (cis)';
+  const cmdTemplate = `cmd.exe /c chcp 65001 >nul && "${cisCmd}" -t %FMT% %ARG%`;
+  const appliesTo = 'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif';
 
-  let regContent = 'Windows Registry Editor Version 5.00\n\n';
+  let psScript = `
+# Set registry values helper function
+function Set-RegValue {
+    param($Path, $Name, $Value)
+    if (-not (Test-Path $Path)) {
+        New-Item -Path $Path -Force | Out-Null
+    }
+    Set-ItemProperty -Path $Path -Name $Name -Value $Value
+}
+
+$icon = '${iconPath.replace(/'/g, "''")}'
+
+`;
 
   for (const menu of menuBases) {
     // 主菜单
-    regContent += `[${menu.base}]\n`;
-    regContent += `@="${escapeReg('🖼 转换图片 (cis)')}"\n`;
-    regContent += `"Icon"="${escapeReg(iconPath)}"\n`;
-    regContent += `"SubCommands"=""\n`;
-    regContent += '\n';
+    psScript += `Set-RegValue -Path '${menu.base}' -Name '(Default)' -Value '${menuLabel}'
+Set-RegValue -Path '${menu.base}' -Name 'Icon' -Value $icon
+Set-RegValue -Path '${menu.base}' -Name 'SubCommands' -Value ''
+
+`;
 
     // 子菜单
     for (const fmt of formats) {
-      const shellKey = `${menu.base}\\shell\\${fmt.verb}`;
-      regContent += `[${shellKey}]\n`;
-      regContent += `@="${escapeReg(fmt.label)}"\n`;
-      regContent += `"Icon"="${escapeReg(iconPath)}"\n`;
-      regContent += '\n';
+      const shellPath = `${menu.base}\\shell\\${fmt.verb}`;
+      const cmdValue = cmdTemplate.replace('%FMT%', fmt.verb).replace('%ARG%', menu.arg);
+      psScript += `Set-RegValue -Path '${shellPath}' -Name '(Default)' -Value '${fmt.label}'
+Set-RegValue -Path '${shellPath}' -Name 'Icon' -Value $icon
+Set-RegValue -Path '${shellPath}\\command' -Name '(Default)' -Value '${cmdValue.replace(/'/g, "''")}'
 
-      const cmdValue = `cmd.exe /c chcp 65001 >nul && "${cisCmd}" -t ${fmt.verb} ${menu.arg}`;
-      const cmdKey = `${shellKey}\\command`;
-      regContent += `[${cmdKey}]\n`;
-      regContent += `@="${escapeReg(cmdValue)}"\n`;
-      regContent += '\n';
+`;
     }
   }
 
   // 文件右键 AppliesTo
-  const appliesTo = 'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif';
-  regContent += '[HKCU\\Software\\Classes\\*\\shell\\cis]\n';
-  regContent += `"AppliesTo"="${escapeReg(appliesTo)}"\n`;
+  psScript += `Set-RegValue -Path 'HKCU:\\Software\\Classes\\*\\shell\\cis' -Name 'AppliesTo' -Value '${appliesTo}'
 
-  // 写入 .reg 文件
-  const regPath = path.join(appDataDir, 'cis-menu.reg');
-  fs.writeFileSync(regPath, '\ufeff' + regContent, 'utf16le');
+`;
 
-  // 执行 regedit 导入
+  // 写入脚本
+  const psPath = path.join(appDataDir, 'cis-install.ps1');
+  const BOM = '\ufeff';
+  fs.writeFileSync(psPath, BOM + psScript.trim(), 'utf8');
+
+  // 执行脚本
   try {
-    execSync(`regedit.exe /s "${regPath}"`, { stdio: 'ignore', timeout: 30000 });
-  } catch (e) {
+    execSync(`powershell.exe -ExecutionPolicy Bypass -File "${psPath}"`, { stdio: 'inherit', timeout: 60000 });
+  } catch {
     console.error('❌ 右键菜单安装失败');
     process.exit(1);
   }
