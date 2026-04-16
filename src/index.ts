@@ -78,7 +78,7 @@ function installContextMenu(): void {
   }
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
-  // ── 全部使用 PowerShell 注册表操作 ──
+  // ── 格式列表 ──
   const formats = [
     { verb: 'webp', label: '🌀 WebP' },
     { verb: 'jpg', label: '📷 JPG' },
@@ -90,73 +90,60 @@ function installContextMenu(): void {
     { verb: 'jp2', label: '📐 JPEG2000' },
   ];
 
-  // 转义单引号用于 PowerShell 字符串
-  const escapedCis = cisCmd.replace(/'/g, "''");
-  const escapedIcon = iconPath.replace(/'/g, "''");
+  // ── 生成 .reg 文件 ──
+  const menuBases = [
+    { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', arg: '-p "%V"' },
+    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', arg: '-p "%1"' },
+    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', arg: '-f "%1"' },
+  ];
 
-  const psScript = `
-$cwd = Get-Location
-$cisCmd = '${escapedCis}'
-$iconPath = '${escapedIcon}'
-$formats = @(
-  @{Verb='webp'; Label='🌀 WebP'},
-  @{Verb='jpg'; Label='📷 JPG'},
-  @{Verb='png'; Label='🖼 PNG'},
-  @{Verb='avif'; Label='📺 AVIF'},
-  @{Verb='gif'; Label='🎞 GIF'},
-  @{Verb='tiff'; Label='📋 TIFF'},
-  @{Verb='heif'; Label='🍎 HEIF'},
-  @{Verb='jp2'; Label='📐 JPEG2000'}
-)
+  // 转义 reg 文件中的特殊字符
+  const escapeReg = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '""');
 
-$menuBases = @(
-  @{Base='HKCU:\\Software\\Classes\\Directory\\Background\\shell\\cis'; Arg='-p "%V"'},
-  @{Base='HKCU:\\Software\\Classes\\Directory\\shell\\cis'; Arg='-p "%1"'},
-  @{Base='HKCU:\\Software\\Classes\\*\\shell\\cis'; Arg='-f "%1"'}
-)
+  let regContent = 'Windows Registry Editor Version 5.00\n\n';
 
-foreach ($menu in $menuBases) {
-    $base = $menu.Base
-    $arg = $menu.Arg
+  for (const menu of menuBases) {
+    // 主菜单
+    regContent += `[${menu.base}]\n`;
+    regContent += `@="${escapeReg('🖼 转换图片 (cis)')}"\n`;
+    regContent += `"Icon"="${escapeReg(iconPath)}"\n`;
+    regContent += `"SubCommands"=""\n`;
+    regContent += '\n';
 
-    # 创建主键
-    New-Item -Path $base -Force | Out-Null
-    Set-ItemProperty -Path $base -Name "(Default)" -Value "🖼 转换图片 (cis)"
-    Set-ItemProperty -Path $base -Name "Icon" -Value $iconPath
-    Set-ItemProperty -Path $base -Name "SubCommands" -Value ""
+    // 子菜单
+    for (const fmt of formats) {
+      const shellKey = `${menu.base}\\shell\\${fmt.verb}`;
+      regContent += `[${shellKey}]\n`;
+      regContent += `@="${escapeReg(fmt.label)}"\n`;
+      regContent += `"Icon"="${escapeReg(iconPath)}"\n`;
+      regContent += '\n';
 
-    # 每个格式的子菜单
-    foreach ($fmt in $formats) {
-        $shellKey = "$base\\shell\\$($fmt.Verb)"
-        $cmdKey = "$shellKey\\command"
-
-        New-Item -Path $shellKey -Force | Out-Null
-        Set-ItemProperty -Path $shellKey -Name "(Default)" -Value $fmt.Label
-        Set-ItemProperty -Path $shellKey -Name "Icon" -Value $iconPath
-
-        $cmd = "cmd.exe /c chcp 65001 >nul && ""$cisCmd"" -t $($fmt.Verb) $arg"
-        New-Item -Path $cmdKey -Force | Out-Null
-        Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value $cmd
+      const cmdValue = `cmd.exe /c chcp 65001 >nul && "${cisCmd}" -t ${fmt.verb} ${menu.arg}`;
+      const cmdKey = `${shellKey}\\command`;
+      regContent += `[${cmdKey}]\n`;
+      regContent += `@="${escapeReg(cmdValue)}"\n`;
+      regContent += '\n';
     }
-}
+  }
 
-# 文件右键添加 AppliesTo 过滤器
-Set-ItemProperty -Path "HKCU:\\Software\\Classes\\*\\shell\\cis" -Name "AppliesTo" -Value "System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif"
+  // 文件右键 AppliesTo
+  const appliesTo = 'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif';
+  regContent += '[HKCU\\Software\\Classes\\*\\shell\\cis]\n';
+  regContent += `"AppliesTo"="${escapeReg(appliesTo)}"\n`;
 
-Write-Host "✅ 右键菜单安装成功！"
-`;
+  // 写入 .reg 文件
+  const regPath = path.join(appDataDir, 'cis-menu.reg');
+  fs.writeFileSync(regPath, '\ufeff' + regContent, 'utf16le');
 
-  const psPath = path.join(appDataDir, 'install-menu.ps1');
-  const BOM = '\ufeff';
-  fs.writeFileSync(psPath, BOM + psScript, 'utf8');
-
+  // 执行 regedit 导入
   try {
-    execSync(`powershell.exe -ExecutionPolicy Bypass -File "${psPath}"`, { stdio: 'inherit' });
-  } catch {
+    execSync(`regedit.exe /s "${regPath}"`, { stdio: 'ignore', timeout: 30000 });
+  } catch (e) {
     console.error('❌ 右键菜单安装失败');
     process.exit(1);
   }
 
+  console.log('✅ 右键菜单安装成功！');
   console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式子菜单');
   console.log('   🖼  图片文件上右键       → 悬停展开格式子菜单');
   console.log(`   📂 输出目录: <原目录>/output/`);
@@ -166,29 +153,22 @@ Write-Host "✅ 右键菜单安装成功！"
 function uninstallContextMenu(): void {
   requireWindows();
 
-  const psScript = `
-$keys = @(
-  'HKCU:\\Software\\Classes\\Directory\\Background\\shell\\cis',
-  'HKCU:\\Software\\Classes\\Directory\\shell\\cis',
-  'HKCU:\\Software\\Classes\\*\\shell\\cis'
-)
-foreach ($key in $keys) {
-    Remove-Item -Path $key -Recurse -Force -ErrorAction SilentlyContinue
-}
-Write-Host "✅ 右键菜单已卸载"
-`;
+  // 删除注册表项
+  const keys = [
+    'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis',
+    'HKCU\\Software\\Classes\\Directory\\shell\\cis',
+    'HKCU\\Software\\Classes\\*\\shell\\cis',
+  ];
 
-  const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
-  const psPath = path.join(appDataDir, 'uninstall-menu.ps1');
-  const BOM = '\ufeff';
-  fs.writeFileSync(psPath, BOM + psScript, 'utf8');
-
-  try {
-    execSync(`powershell.exe -ExecutionPolicy Bypass -File "${psPath}"`, { stdio: 'inherit' });
-  } catch {
-    console.error('❌ 卸载失败');
-    process.exit(1);
+  for (const key of keys) {
+    try {
+      execSync(`reg delete "${key}" /f`, { stdio: 'ignore' });
+    } catch {
+      // 忽略不存在的键
+    }
   }
+
+  console.log('✅ 右键菜单已卸载');
 }
 
 // ─────────────────────────────────────────
