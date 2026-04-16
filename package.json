@@ -1,8 +1,14 @@
 {
   "name": "change-image-suffix",
-  "version": "1.1.0",
-  "description": "批量转换图片格式的CLI工具，支持递归搜索、深度限制、指定后缀等功能",
+  "version": "1.2.0",
+  "description": "批量转换图片格式的CLI工具，支持递归搜索、深度限制、指定后缀、Windows右键菜单等功能",
   "main": "dist/index.js",
+  "files": [
+    "dist/",
+    "assets/",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "change-image-suffix": "./dist/index.js",
     "cis": "./dist/index.js"
@@ -11,7 +17,7 @@
     "build": "tsc",
     "prepublish": "npm run build"
   },
-  "keywords": ["cli", "image", "converter", "webp", "png", "jpg", "batch", "sharp"],
+  "keywords": ["cli", "image", "converter", "webp", "png", "jpg", "batch", "sharp", "context-menu"],
   "author": "siriussupreme",
   "license": "MIT",
   "repository": {

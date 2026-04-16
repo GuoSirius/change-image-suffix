@@ -64,25 +64,40 @@ function installContextMenu(): void {
     }
   }
 
+  // ── 复制 ICO 到用户 AppData 目录 ──
+  const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
+  if (!fs.existsSync(appDataDir)) {
+    fs.mkdirSync(appDataDir, { recursive: true });
+  }
+  const icoTarget = path.join(appDataDir, 'icon.ico');
+  // ICO 文件随包一起发布，在 assets/icon.ico
+  const icoSource = path.join(__dirname, '..', 'assets', 'icon.ico');
+  if (fs.existsSync(icoSource)) {
+    fs.copyFileSync(icoSource, icoTarget);
+  }
+
   // Windows cmd 运行 .cmd 脚本需要用 cmd /c
   const runner = `cmd.exe /c "${cisCmd}" -p "%V" & pause`;
+  // 图标路径（若 ICO 复制成功则用它，否则回退到 cisCmd）
+  const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
   // ── 1. 目录空白处右键（Directory\Background）──
   const bgBase = 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis';
-  regAddDefault(bgBase, '🖼 转换图片为 WebP (cis)');
-  regAdd(bgBase, 'Icon', cisCmd);
+  regAddDefault(bgBase, '转换图片为 WebP (cis)');
+  regAdd(bgBase, 'Icon', iconPath);
   const bgCmd = bgBase + '\\command';
   regAddDefault(bgCmd, runner);
 
   // ── 2. 目录本身右键（Directory）──
   const dirBase = 'HKCU\\Software\\Classes\\Directory\\shell\\cis';
-  regAddDefault(dirBase, '🖼 转换图片为 WebP (cis)');
-  regAdd(dirBase, 'Icon', cisCmd);
+  regAddDefault(dirBase, '转换图片为 WebP (cis)');
+  regAdd(dirBase, 'Icon', iconPath);
   const dirCmd = dirBase + '\\command';
   regAddDefault(dirCmd, `cmd.exe /c "${cisCmd}" -p "%1" & pause`);
 
   console.log('✅ 右键菜单安装成功！');
-  console.log('   在任意文件夹空白处或文件夹上右键，即可看到「🖼 转换图片为 WebP (cis)」');
+  console.log('   在任意文件夹空白处或文件夹上右键，即可看到「转换图片为 WebP (cis)」');
+  console.log(`   图标位置: ${iconPath}`);
   console.log('\n💡 提示：如需卸载，执行 cis uninstall-menu');
 }
 
