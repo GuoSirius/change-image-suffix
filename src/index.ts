@@ -92,68 +92,37 @@ function installContextMenu(): void {
 
   // ── 菜单配置 ──
   const menuBases = [
-    { base: 'HKCU:\\Software\\Classes\\Directory\\Background\\shell\\cis', arg: '-p "%V"' },
-    { base: 'HKCU:\\Software\\Classes\\Directory\\shell\\cis', arg: '-p "%1"' },
-    { base: 'HKCU:\\Software\\Classes\\*\\shell\\cis', arg: '-f "%1"' },
+    { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', arg: '-p "%V"' },
+    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', arg: '-p "%1"' },
+    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', arg: '-f "%1"' },
   ];
 
-  // ── 生成 PowerShell 脚本 ──
-  // 使用 PowerShell 脚本创建注册表项，避免引号转义问题
+  // ── 直接使用 reg.exe 命令安装注册表 ──
   const menuLabel = '🖼 转换图片 (cis)';
-  const cmdTemplate = `cmd.exe /c chcp 65001 >nul && "${cisCmd}" -t %FMT% %ARG%`;
   const appliesTo = 'System.FileName:*.png OR System.FileName:*.jpg OR System.FileName:*.jpeg OR System.FileName:*.gif OR System.FileName:*.bmp OR System.FileName:*.tiff OR System.FileName:*.tif OR System.FileName:*.webp OR System.FileName:*.avif';
 
-  let psScript = `
-# Set registry values helper function
-function Set-RegValue {
-    param($Path, $Name, $Value)
-    if (-not (Test-Path $Path)) {
-        New-Item -Path $Path -Force | Out-Null
-    }
-    Set-ItemProperty -Path $Path -Name $Name -Value $Value
-}
-
-$icon = '${iconPath.replace(/'/g, "''")}'
-
-`;
+  function addReg(key: string, name: string, value: string): void {
+    const cmd = name === '(default)'
+      ? `reg add "${key}" /ve /d "${value}" /f`
+      : `reg add "${key}" /v "${name}" /d "${value}" /f`;
+    execSync(cmd, { stdio: 'ignore' });
+  }
 
   for (const menu of menuBases) {
-    // 主菜单
-    psScript += `Set-RegValue -Path '${menu.base}' -Name '(Default)' -Value '${menuLabel}'
-Set-RegValue -Path '${menu.base}' -Name 'Icon' -Value $icon
-Set-RegValue -Path '${menu.base}' -Name 'SubCommands' -Value ''
+    addReg(menu.base, '(default)', menuLabel);
+    addReg(menu.base, 'Icon', iconPath);
+    addReg(menu.base, 'SubCommands', '');
 
-`;
-
-    // 子菜单
     for (const fmt of formats) {
-      const shellPath = `${menu.base}\\shell\\${fmt.verb}`;
-      const cmdValue = cmdTemplate.replace('%FMT%', fmt.verb).replace('%ARG%', menu.arg);
-      psScript += `Set-RegValue -Path '${shellPath}' -Name '(Default)' -Value '${fmt.label}'
-Set-RegValue -Path '${shellPath}' -Name 'Icon' -Value $icon
-Set-RegValue -Path '${shellPath}\\command' -Name '(Default)' -Value '${cmdValue.replace(/'/g, "''")}'
-
-`;
+      const shellKey = `${menu.base}\\shell\\${fmt.verb}`;
+      const cmd = `cmd /c ""${cisCmd}" -t ${fmt.verb} ${menu.arg}"`;
+      addReg(shellKey, '(default)', fmt.label);
+      addReg(shellKey, 'Icon', iconPath);
+      addReg(`${shellKey}\\command`, '(default)', cmd);
     }
   }
 
-  // 文件右键 AppliesTo
-  psScript += `Set-RegValue -Path 'HKCU:\\Software\\Classes\\*\\shell\\cis' -Name 'AppliesTo' -Value '${appliesTo}'
-
-`;
-
-  // 写入脚本
-  const psPath = path.join(appDataDir, 'cis-install.ps1');
-  const BOM = '\ufeff';
-  fs.writeFileSync(psPath, BOM + psScript.trim(), 'utf8');
-
-  // 执行脚本
-  try {
-    execSync(`powershell.exe -ExecutionPolicy Bypass -File "${psPath}"`, { stdio: 'inherit', timeout: 60000 });
-  } catch {
-    console.error('❌ 右键菜单安装失败');
-    process.exit(1);
-  }
+  addReg('HKCU\\Software\\Classes\\*\\shell\\cis', 'AppliesTo', appliesTo);
 
   console.log('✅ 右键菜单安装成功！');
   console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式子菜单');
