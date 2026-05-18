@@ -217,6 +217,8 @@ npm install -g change-image-suffix
 npm update -g change-image-suffix
 ```
 
+---
+
 ## 开发
 
 ```bash
@@ -233,6 +235,69 @@ npm run build
 # 链接到全局（开发时）
 npm link
 ```
+
+### 提交规范
+
+项目使用 [Conventional Commits](https://www.conventionalcommits.org/) 规范，提交信息格式：
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**type 类型：**
+- `feat`: 新功能
+- `fix`: 修复bug
+- `docs`: 文档更新
+- `style`: 代码格式（不影响代码运行的变动）
+- `refactor`: 重构
+- `perf`: 性能优化
+- `test`: 测试相关
+- `chore`: 构建/工具类改动
+
+### 发布流程
+
+```bash
+# 执行一键发布脚本
+npm run release
+
+# 或指定版本类型
+npm run release:patch   # 修复bug
+npm run release:minor   # 新增功能  
+npm run release:major   # 重大变更
+```
+
+发布脚本会自动：
+1. 检测未提交文件并提示提交
+2. 交互式选择版本更新类型
+3. 更新版本号和 CHANGELOG.md
+4. 推送至远程仓库
+5. 发布到 npm
+
+---
+
+## 项目结构
+
+```
+├── config/              # 配置文件目录
+│   ├── commitlint.config.js    # commitlint 配置
+│   └── standard-version.config.js  # standard-version 配置
+├── .github/workflows/   # GitHub Actions 工作流
+│   └── release.yml      # 自动发布工作流
+├── .husky/              # Git 钩子
+│   └── commit-msg       # 提交信息校验钩子
+├── scripts/             # 脚本目录
+│   └── release.js       # 一键发布脚本
+├── src/                 # 源代码
+│   └── index.ts         # 主入口
+├── CHANGELOG.md         # 变更日志
+└── package.json         # 项目配置
+```
+
+---
 
 ## License
 

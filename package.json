@@ -15,9 +15,23 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepublish": "npm run build"
+    "prepublish": "npm run build",
+    "release": "node scripts/release.js",
+    "release:patch": "node scripts/release.js --patch",
+    "release:minor": "node scripts/release.js --minor",
+    "release:major": "node scripts/release.js --major"
   },
-  "keywords": ["cli", "image", "converter", "webp", "png", "jpg", "batch", "sharp", "context-menu"],
+  "keywords": [
+    "cli",
+    "image",
+    "converter",
+    "webp",
+    "png",
+    "jpg",
+    "batch",
+    "sharp",
+    "context-menu"
+  ],
   "author": "siriussupreme",
   "license": "MIT",
   "repository": {
@@ -28,7 +42,12 @@
     "sharp": "^0.33.2"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.0.1",
+    "@commitlint/config-conventional": "^21.0.1",
     "@types/node": "^20.11.0",
+    "husky": "^9.1.7",
+    "inquirer": "^13.4.3",
+    "standard-version": "^9.5.0",
     "typescript": "^5.3.3"
   },
   "engines": {
