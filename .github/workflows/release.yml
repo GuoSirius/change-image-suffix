@@ -26,56 +26,7 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Get release version
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Get release notes from CHANGELOG
-        id: get_release_notes
-        run: |
-          TAG_VERSION="${{ steps.get_version.outputs.VERSION }}"
-          if [ -f "CHANGELOG.md" ]; then
-            # standard-version 的格式是 ## [x.x.x]，支持匹配多种标题格式
-            CONTENT=""
-            # 尝试匹配 ## [x.x.x] 格式（标准格式）
-            CONTENT=$(sed -n '/## \['"${TAG_VERSION}"'\]/,/## \[/p' CHANGELOG.md)
-            if [ -z "$CONTENT" ]; then
-              # 尝试匹配 ## [vx.x.x] 格式
-              CONTENT=$(sed -n '/## \[v'"${TAG_VERSION}"'\]/,/## \[/p' CHANGELOG.md)
-            fi
-            if [ -z "$CONTENT" ]; then
-              # 尝试匹配 ## x.x.x 格式
-              CONTENT=$(sed -n '/## '"${TAG_VERSION}"'/,/## /p' CHANGELOG.md)
-            fi
-            if [ -z "$CONTENT" ]; then
-              # 尝试匹配 ## vx.x.x 格式
-              CONTENT=$(sed -n '/## v'"${TAG_VERSION}"'/,/## /p' CHANGELOG.md)
-            fi
-            if [ -z "$CONTENT" ]; then
-              # 如果没有找到，使用默认内容
-              CONTENT="## ${TAG_VERSION}\n\n- 发布版本 ${TAG_VERSION}"
-            else
-              # 移除末尾多余的 ## [ 行
-              CONTENT=$(echo "$CONTENT" | sed '$d')
-            fi
-            # 使用 GITHUB_OUTPUT 的多行格式
-            echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
-            echo "$CONTENT" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "RELEASE_NOTES=## ${TAG_VERSION}\n\n- 发布版本 ${TAG_VERSION}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Publish to npm
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: v${{ steps.get_version.outputs.VERSION }}
-          body: ${{ steps.get_release_notes.outputs.RELEASE_NOTES }}
-          draft: false
-          prerelease: false
-          token: ${{ secrets.GITHUB_TOKEN }}
