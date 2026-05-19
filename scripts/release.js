@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { execSync } = require('child_process');
-const inquirer = require('inquirer');
+const { prompt } = require('enquirer');
 const fs = require('fs');
 const path = require('path');
 
@@ -63,7 +63,7 @@ async function main() {
     console.log(getUnstagedFiles());
     console.log('');
 
-    const { commitMessage } = await inquirer.prompt({
+    const response = await prompt({
       type: 'input',
       name: 'commitMessage',
       message: '请输入提交信息（需符合Conventional Commits规范）:',
@@ -82,40 +82,33 @@ async function main() {
     execSync('git add .');
 
     console.log('执行 git commit...');
-    execSync(`git commit -m "${commitMessage}"`);
+    execSync(`git commit -m "${response.commitMessage}"`);
     console.log('✅ 提交成功\n');
   }
 
-  const { releaseType } = await inquirer.prompt({
-    type: 'list',
+  const releaseResponse = await prompt({
+    type: 'select',
     name: 'releaseType',
     message: '请选择版本更新类型:',
     choices: [
-      {
-        name: `patch (${currentVersion} → ${calculateNextVersion(currentVersion, 'patch')}) - 修复bug`,
-        value: 'patch'
-      },
-      {
-        name: `minor (${currentVersion} → ${calculateNextVersion(currentVersion, 'minor')}) - 新增功能`,
-        value: 'minor'
-      },
-      {
-        name: `major (${currentVersion} → ${calculateNextVersion(currentVersion, 'major')}) - 重大变更`,
-        value: 'major'
-      }
+      `patch (${currentVersion} → ${calculateNextVersion(currentVersion, 'patch')}) - 修复bug',
+      `minor (${currentVersion} → ${calculateNextVersion(currentVersion, 'minor')}) - 新增功能`,
+      `major (${currentVersion} → ${calculateNextVersion(currentVersion, 'major')}) - 重大变更`
     ]
   });
 
+  // 从选择的字符串中提取版本类型
+  const releaseType = releaseResponse.releaseType.split(' ')[0];
   const nextVersion = calculateNextVersion(currentVersion, releaseType);
 
-  const { confirm } = await inquirer.prompt({
+  const confirmResponse = await prompt({
     type: 'confirm',
     name: 'confirm',
     message: `即将发布 ${releaseType} 版本: ${currentVersion} → ${nextVersion}，确认继续？`,
-    default: true
+    initial: true
   });
 
-  if (!confirm) {
+  if (!confirmResponse.confirm) {
     console.log('❌ 发布已取消');
     process.exit(0);
   }
