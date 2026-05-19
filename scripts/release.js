@@ -51,6 +51,14 @@ function hasRemote(name) {
   }
 }
 
+function parseArgs() {
+  const args = process.argv.slice(2);
+  if (args.includes('--patch')) return 'patch';
+  if (args.includes('--minor')) return 'minor';
+  if (args.includes('--major')) return 'major';
+  return null;
+}
+
 async function main() {
   console.log('\n🚀 一键发布脚本');
   console.log('================\n');
@@ -86,25 +94,31 @@ async function main() {
     console.log('✅ 提交成功\n');
   }
 
-  const releaseResponse = await prompt({
-    type: 'select',
-    name: 'releaseType',
-    message: '请选择版本更新类型:',
-    choices: [
-      `patch (${currentVersion} → ${calculateNextVersion(currentVersion, 'patch')}) - 修复bug',
-      `minor (${currentVersion} → ${calculateNextVersion(currentVersion, 'minor')}) - 新增功能`,
-      `major (${currentVersion} → ${calculateNextVersion(currentVersion, 'major')}) - 重大变更`
-    ]
-  });
+  let releaseType = parseArgs();
 
-  // 从选择的字符串中提取版本类型
-  const releaseType = releaseResponse.releaseType.split(' ')[0];
+  if (!releaseType) {
+    const releaseResponse = await prompt({
+      type: 'select',
+      name: 'releaseType',
+      message: '请选择版本更新类型:',
+      choices: [
+        `patch (${currentVersion} → ${calculateNextVersion(currentVersion, 'patch')}) - 修复bug`,
+        `minor (${currentVersion} → ${calculateNextVersion(currentVersion, 'minor')}) - 新增功能`,
+        `major (${currentVersion} → ${calculateNextVersion(currentVersion, 'major')}) - 重大变更`
+      ]
+    });
+
+    // 从选择的字符串中提取版本类型
+    releaseType = releaseResponse.releaseType.split(' ')[0];
+  }
+
   const nextVersion = calculateNextVersion(currentVersion, releaseType);
+  console.log(`\n即将发布 ${releaseType} 版本: ${currentVersion} → ${nextVersion}\n`);
 
   const confirmResponse = await prompt({
     type: 'confirm',
     name: 'confirm',
-    message: `即将发布 ${releaseType} 版本: ${currentVersion} → ${nextVersion}，确认继续？`,
+    message: '确认继续？',
     initial: true
   });
 

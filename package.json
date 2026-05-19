@@ -18,12 +18,16 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
+    "clean": "rimraf dist",
     "build": "tsc",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run clean && npm run build",
     "release": "node scripts/release.js",
     "release:patch": "node scripts/release.js --patch",
     "release:minor": "node scripts/release.js --minor",
-    "release:major": "node scripts/release.js --major"
+    "release:major": "node scripts/release.js --major",
+    "lint": "echo \"Linting not configured yet\"",
+    "lint:fix": "echo \"Linting fix not configured yet\"",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "cli",
@@ -51,6 +55,7 @@
     "@types/node": "^20.11.0",
     "enquirer": "^2.4.1",
     "husky": "^9.1.7",
+    "rimraf": "^6.1.3",
     "standard-version": "^9.5.0",
     "typescript": "^5.3.3"
   },

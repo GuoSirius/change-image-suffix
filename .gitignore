@@ -26,10 +26,6 @@ yarn-error.log*
 *.swo
 *~
 
-# npm
-package-lock.json
-yarn.lock
-
 # Testing
 coverage/
 .nyc_output/
