@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.0.2](https://github.com/GuoSirius/change-image-suffix/compare/v2.0.1...v2.0.2) (2026-05-19)
+
+
+### CI/CD
+
+* add build step to GitHub Actions ([d900c7b](https://github.com/GuoSirius/change-image-suffix/commit/d900c7b69c390554aeb1f76a940e178688f8a6c5))
+
 ### [2.0.1](https://github.com/GuoSirius/change-image-suffix/compare/v2.0.0...v2.0.1) (2026-05-19)
 
 ## [2.0.0](https://github.com/GuoSirius/change-image-suffix/compare/v1.18.2...v2.0.0) (2026-05-19)
