@@ -39,11 +39,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: v${{ steps.get_version.outputs.VERSION }}
+          generate_release_notes: true
           body: |
-            ## What's Changed in v${{ steps.get_version.outputs.VERSION }}
-            
-            See [CHANGELOG.md](https://github.com/GuoSirius/change-image-suffix/blob/main/CHANGELOG.md) for full changes.
-            
             ---
             
             ## Installation
