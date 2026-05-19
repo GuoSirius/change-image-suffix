@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.0.0](https://github.com/GuoSirius/change-image-suffix/compare/v1.18.2...v2.0.0) (2026-05-19)
+
+
+### Refactoring
+
+* simplify GitHub Actions workflow - only publish to npm ([c0111f4](https://github.com/GuoSirius/change-image-suffix/commit/c0111f4a10d64b6b884ed277ece158e04ce03b61))
+
+
+### Chores
+
+* add .versionrc to show all commit types in CHANGELOG ([8c9860b](https://github.com/GuoSirius/change-image-suffix/commit/8c9860b77e6584cf46559adba2309ac2f531f437))
+* restore complete publish workflow with CHANGELOG extraction and GitHub Release ([0a2e5e4](https://github.com/GuoSirius/change-image-suffix/commit/0a2e5e44e7890e7f6b1dcd232c96d031059265dd))
+* simplify GitHub Actions - only publish to npm ([1621a04](https://github.com/GuoSirius/change-image-suffix/commit/1621a04396ae58d8cda4b430c29464bc6333bab0))
+* update GitHub Actions workflow with CHANGELOG extraction ([11529dd](https://github.com/GuoSirius/change-image-suffix/commit/11529ddef272576a2622e0a5938926d47e2dd8ec))
+* update GitHub Release format - What's Changed + Installation + Changelog ([d976363](https://github.com/GuoSirius/change-image-suffix/commit/d976363381e05d8310058a871af1f050286b2c12))
+* use GitHub auto-generated release notes ([e2844a7](https://github.com/GuoSirius/change-image-suffix/commit/e2844a703edee055649ad8f2957c4566b1335cd9))
+
 ### [1.18.3](https://github.com/GuoSirius/change-image-suffix/compare/v1.18.2...v1.18.3) (2026-05-19)
 
 ### [1.18.2](https://github.com/GuoSirius/change-image-suffix/compare/v1.18.1...v1.18.2) (2026-05-19)
