@@ -13,9 +13,13 @@
     "change-image-suffix": "./dist/index.js",
     "cis": "./dist/index.js"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "tsc",
-    "prepublish": "npm run build",
+    "prepublishOnly": "npm run build",
     "release": "node scripts/release.js",
     "release:patch": "node scripts/release.js --patch",
     "release:minor": "node scripts/release.js --minor",

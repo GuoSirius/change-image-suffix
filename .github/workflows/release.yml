@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,7 +26,45 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
+      - name: Get release version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Get release notes from CHANGELOG
+        id: get_release_notes
+        run: |
+          TAG_VERSION="${{ steps.get_version.outputs.VERSION }}"
+          # 尝试从 CHANGELOG.md 中提取该版本的变更记录
+          if [ -f "CHANGELOG.md" ]; then
+            # 使用 grep 和 sed 提取特定版本的内容
+            # 匹配 ## [x.x.x] 或 ## x.x.x 或 ## vx.x.x 格式的标题
+            CONTENT=$(sed -n '/## \[*v\?'"${TAG_VERSION}"'\]*/,/## \[/p' CHANGELOG.md | sed '${ /## \[/d; }')
+            if [ -z "$CONTENT" ]; then
+              # 如果没找到，尝试匹配 ## x.x.x 格式
+              CONTENT=$(sed -n '/## '"${TAG_VERSION}"'/,/## /p' CHANGELOG.md | sed '$d')
+            fi
+            # 移除标题行
+            CONTENT=$(echo "$CONTENT" | sed '1d')
+            if [ -z "$CONTENT" ]; then
+              CONTENT="## ${TAG_VERSION}\n\n* 发布版本 ${TAG_VERSION}"
+            fi
+            echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+            echo "$CONTENT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "RELEASE_NOTES=## ${TAG_VERSION}\n\n* 发布版本 ${TAG_VERSION}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish to npm
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.get_version.outputs.VERSION }}
+          body: ${{ steps.get_release_notes.outputs.RELEASE_NOTES }}
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
