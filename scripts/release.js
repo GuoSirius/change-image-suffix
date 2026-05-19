@@ -121,7 +121,7 @@ async function main() {
   }
 
   console.log('\n📦 执行 standard-version 更新版本和changelog...');
-  execSync(`npx standard-version --release-as ${releaseType} --skip.tag -i config/standard-version.config.js`);
+  execSync(`npx standard-version --release-as ${releaseType} --skip.tag`);
   console.log('✅ 版本和changelog更新成功');
 
   console.log('\n🏷️ 打标签...');

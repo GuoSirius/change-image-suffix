@@ -282,9 +282,6 @@ npm run release:major   # 重大变更
 ## 项目结构
 
 ```
-├── config/              # 配置文件目录
-│   ├── commitlint.config.js    # commitlint 配置
-│   └── standard-version.config.js  # standard-version 配置
 ├── .github/workflows/   # GitHub Actions 工作流
 │   └── release.yml      # 自动发布工作流
 ├── .husky/              # Git 钩子
@@ -293,6 +290,7 @@ npm run release:major   # 重大变更
 │   └── release.js       # 一键发布脚本
 ├── src/                 # 源代码
 │   └── index.ts         # 主入口
+├── .commitlintrc.json   # commitlint 配置
 ├── CHANGELOG.md         # 变更日志
 └── package.json         # 项目配置
 ```
