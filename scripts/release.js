@@ -128,13 +128,10 @@ async function main() {
   }
 
   console.log('\n📦 执行 standard-version 更新版本和changelog...');
-  execSync(`npx standard-version --release-as ${releaseType} --skip.tag`);
-  console.log('✅ 版本和changelog更新成功');
-
-  console.log('\n🏷️ 打标签...');
+  // standard-version 会自动更新 package.json、创建 CHANGELOG.md 和打 tag
+  execSync(`npx standard-version --release-as ${releaseType}`);
   const newVersion = getCurrentVersion();
-  execSync(`git tag -a v${newVersion} -m "chore(release): ${newVersion}"`);
-  console.log(`✅ 标签 v${newVersion} 创建成功`);
+  console.log('✅ 版本和changelog更新成功，tag已创建: v' + newVersion);
 
   console.log('\n📤 推送到 origin...');
   execSync('git push origin main');
@@ -153,7 +150,7 @@ async function main() {
   }
   console.log('✅ Tags 推送成功');
 
-  console.log('\n🎉 发布完成！新版本: ' + getCurrentVersion());
+  console.log('\n🎉 发布完成！新版本: ' + newVersion);
   console.log('📝 GitHub Actions 将自动构建并发布到 npm...');
 
 }

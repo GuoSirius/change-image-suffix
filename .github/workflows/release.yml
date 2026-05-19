@@ -34,25 +34,36 @@ jobs:
         id: get_release_notes
         run: |
           TAG_VERSION="${{ steps.get_version.outputs.VERSION }}"
-          # 尝试从 CHANGELOG.md 中提取该版本的变更记录
           if [ -f "CHANGELOG.md" ]; then
-            # 使用 grep 和 sed 提取特定版本的内容
-            # 匹配 ## [x.x.x] 或 ## x.x.x 或 ## vx.x.x 格式的标题
-            CONTENT=$(sed -n '/## \[*v\?'"${TAG_VERSION}"'\]*/,/## \[/p' CHANGELOG.md | sed '${ /## \[/d; }')
+            # standard-version 的格式是 ## [x.x.x]，支持匹配多种标题格式
+            CONTENT=""
+            # 尝试匹配 ## [x.x.x] 格式（标准格式）
+            CONTENT=$(sed -n '/## \['"${TAG_VERSION}"'\]/,/## \[/p' CHANGELOG.md)
             if [ -z "$CONTENT" ]; then
-              # 如果没找到，尝试匹配 ## x.x.x 格式
-              CONTENT=$(sed -n '/## '"${TAG_VERSION}"'/,/## /p' CHANGELOG.md | sed '$d')
+              # 尝试匹配 ## [vx.x.x] 格式
+              CONTENT=$(sed -n '/## \[v'"${TAG_VERSION}"'\]/,/## \[/p' CHANGELOG.md)
             fi
-            # 移除标题行
-            CONTENT=$(echo "$CONTENT" | sed '1d')
             if [ -z "$CONTENT" ]; then
-              CONTENT="## ${TAG_VERSION}\n\n* 发布版本 ${TAG_VERSION}"
+              # 尝试匹配 ## x.x.x 格式
+              CONTENT=$(sed -n '/## '"${TAG_VERSION}"'/,/## /p' CHANGELOG.md)
             fi
+            if [ -z "$CONTENT" ]; then
+              # 尝试匹配 ## vx.x.x 格式
+              CONTENT=$(sed -n '/## v'"${TAG_VERSION}"'/,/## /p' CHANGELOG.md)
+            fi
+            if [ -z "$CONTENT" ]; then
+              # 如果没有找到，使用默认内容
+              CONTENT="## ${TAG_VERSION}\n\n- 发布版本 ${TAG_VERSION}"
+            else
+              # 移除末尾多余的 ## [ 行
+              CONTENT=$(echo "$CONTENT" | sed '$d')
+            fi
+            # 使用 GITHUB_OUTPUT 的多行格式
             echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
             echo "$CONTENT" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           else
-            echo "RELEASE_NOTES=## ${TAG_VERSION}\n\n* 发布版本 ${TAG_VERSION}" >> $GITHUB_OUTPUT
+            echo "RELEASE_NOTES=## ${TAG_VERSION}\n\n- 发布版本 ${TAG_VERSION}" >> $GITHUB_OUTPUT
           fi
 
       - name: Publish to npm
