@@ -1,4 +1,4 @@
-name: Release
+name: Publish to NPM and GitHub Release
 
 on:
   push:
@@ -6,54 +6,102 @@ on:
       - 'v*'
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
-          registry-url: 'https://registry.npmjs.org/'
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build TypeScript
         run: npm run build
 
-      - name: Get release version
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
       - name: Publish to npm
-        run: npm publish
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes from CHANGELOG
+        id: generate_notes
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          echo "Extracting release notes for v$VERSION"
+          
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$VERSION" '
+              BEGIN { in_section=0; target_level=0 }
+              /^[#]+ \[[^]]+\]/ {
+                # Count leading # characters
+                match($0, /^[#]+/)
+                level = RLENGTH
+                
+                if (in_section) {
+                  # If we find a version line with same or fewer #s, stop
+                  if (level <= target_level) exit
+                  next
+                }
+                
+                if ($0 ~ "\\[v?" ver "\\]") {
+                  in_section = 1
+                  target_level = level
+                  next
+                }
+              }
+              in_section {
+                print $0
+              }
+            ' CHANGELOG.md > release_notes.txt
+            
+            if [ -s release_notes.txt ]; then
+              echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+              cat release_notes.txt >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            else
+              echo "RELEASE_NOTES=See [CHANGELOG.md](https://github.com/GuoSirius/change-image-suffix/blob/main/CHANGELOG.md) for detailed changes." >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "RELEASE_NOTES=See [CHANGELOG.md](https://github.com/GuoSirius/change-image-suffix/blob/main/CHANGELOG.md) for detailed changes." >> $GITHUB_OUTPUT
+          fi
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
           name: v${{ steps.get_version.outputs.VERSION }}
-          generate_release_notes: true
           body: |
+            ## What's Changed in v${{ steps.get_version.outputs.VERSION }}
+
+            ${{ steps.generate_notes.outputs.RELEASE_NOTES }}
+
             ---
-            
-            ## Installation
-            
+
+            ### Installation
+
             ```bash
             npm install -g change-image-suffix@${{ steps.get_version.outputs.VERSION }}
             ```
-            
-            ---
-            
-            ## Changelog
-            
+
+            ### Changelog
+
             See the full [CHANGELOG.md](https://github.com/GuoSirius/change-image-suffix/blob/main/CHANGELOG.md) for all changes.
-          draft: false
-          prerelease: false
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup
+        run: rm -f release_notes.txt
