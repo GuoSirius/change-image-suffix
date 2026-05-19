@@ -1,0 +1,36 @@
+# 源代码
+src/
+tsconfig.json
+
+# 配置文件
+.commitlintrc.json
+.versionrc
+
+# Git 相关
+.git/
+.gitignore
+.github/
+.husky/
+
+# 脚本文件（仅用于开发）
+scripts/
+
+# 测试和构建工具
+.vscode/
+.idea/
+.cache/
+
+# 文档文件（package.json 中已明确指定包含的文件会自动保留）
+
+# 日志文件
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 临时文件
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
