@@ -26,7 +26,37 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
+      - name: Get release version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
       - name: Publish to npm
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## What's Changed in v${{ steps.get_version.outputs.VERSION }}
+            
+            See [CHANGELOG.md](https://github.com/GuoSirius/change-image-suffix/blob/main/CHANGELOG.md) for full changes.
+            
+            ---
+            
+            ## Installation
+            
+            ```bash
+            npm install -g change-image-suffix@${{ steps.get_version.outputs.VERSION }}
+            ```
+            
+            ---
+            
+            ## Changelog
+            
+            See the full [CHANGELOG.md](https://github.com/GuoSirius/change-image-suffix/blob/main/CHANGELOG.md) for all changes.
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
