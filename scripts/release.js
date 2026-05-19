@@ -153,11 +153,9 @@ async function main() {
   }
   console.log('✅ Tags 推送成功');
 
-  console.log('\n📦 发布到 npm...');
-  execSync('npm publish');
-  console.log('✅ npm 发布成功');
-
   console.log('\n🎉 发布完成！新版本: ' + getCurrentVersion());
+  console.log('📝 GitHub Actions 将自动构建并发布到 npm...');
+
 }
 
 main().catch((error) => {

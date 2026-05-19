@@ -223,7 +223,7 @@ npm update -g change-image-suffix
 
 ```bash
 # 克隆项目
-git clone https://gitee.com/siriussupreme/change-image-suffix.git
+git clone https://github.com/GuoSirius/change-image-suffix.git
 cd change-image-suffix
 
 # 安装依赖

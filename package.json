@@ -45,8 +45,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://gitee.com/siriussupreme/change-image-suffix.git"
+    "url": "https://github.com/GuoSirius/change-image-suffix.git"
   },
+  "bugs": {
+    "url": "https://github.com/GuoSirius/change-image-suffix/issues"
+  },
+  "homepage": "https://github.com/GuoSirius/change-image-suffix#readme",
   "dependencies": {
     "sharp": "^0.33.2"
   },
