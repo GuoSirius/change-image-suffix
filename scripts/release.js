@@ -90,7 +90,7 @@ async function main() {
     execSync('git add .');
 
     console.log('执行 git commit...');
-    execSync(`git commit -m "${response.commitMessage}"`);
+    execSync(`git commit -m "${response.commitMessage}"`, { stdio: 'inherit' });
     console.log('✅ 提交成功\n');
   }
 
@@ -129,24 +129,24 @@ async function main() {
 
   console.log('\n📦 执行 standard-version 更新版本和changelog...');
   // standard-version 会自动更新 package.json、创建 CHANGELOG.md 和打 tag
-  execSync(`npx standard-version --release-as ${releaseType}`);
+  execSync(`npx standard-version --release-as ${releaseType}`, { stdio: 'inherit' });
   const newVersion = getCurrentVersion();
   console.log('✅ 版本和changelog更新成功，tag已创建: v' + newVersion);
 
   console.log('\n📤 推送到 origin...');
-  execSync('git push origin main');
+  execSync('git push origin main', { stdio: 'inherit' });
   console.log('✅ 推送 origin 成功');
 
   if (hasRemote('github')) {
     console.log('\n📤 推送到 github...');
-    execSync('git push github main');
+    execSync('git push github main', { stdio: 'inherit' });
     console.log('✅ 推送 github 成功');
   }
 
   console.log('\n📤 推送 tags...');
-  execSync('git push --tags origin');
+  execSync('git push --tags origin', { stdio: 'inherit' });
   if (hasRemote('github')) {
-    execSync('git push --tags github');
+    execSync('git push --tags github', { stdio: 'inherit' });
   }
   console.log('✅ Tags 推送成功');
 
