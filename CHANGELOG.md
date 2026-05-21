@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.3](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.2...v2.1.3) (2026-05-21)
+
+
+### Bug Fixes
+
+* **context-menu:** auto-refresh menu on version change, gate preuninstall on global ([396dc45](https://github.com/GuoSirius/change-image-suffix/commit/396dc45f1d0606a16828f8e9467194ec933487d8))
+
 ### [2.1.2](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.1...v2.1.2) (2026-05-21)
 
 
