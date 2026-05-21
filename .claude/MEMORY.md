@@ -1,0 +1,1 @@
+- [context-menu-bat-fix](memory/context-menu-bat-fix.md) — Right-click context menu bat script rewritten, format cleanup, lifecycle hooks added (2026-05-21)
