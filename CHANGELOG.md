@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.1.0](https://github.com/GuoSirius/change-image-suffix/compare/v2.0.2...v2.1.0) (2026-05-21)
+
+
+### Features
+
+* auto context-menu lifecycle hooks, enable declarations, add dev script ([ab44e37](https://github.com/GuoSirius/change-image-suffix/commit/ab44e374040fbfa6715edacb8fb249eeaf746821))
+
+
+### Bug Fixes
+
+* rewrite bat script, remove gif/heif/jp2, same-format copy, quality 90 ([085a589](https://github.com/GuoSirius/change-image-suffix/commit/085a589f96682626834ac9715f7f228d52bfe89d))
+
+
+### Chores
+
+* include .claude/ for cross-device project settings ([c863337](https://github.com/GuoSirius/change-image-suffix/commit/c863337e926826a1799ea0ff4bc6e1f0790afee0))
+
+
+### Documentation
+
+* add CLAUDE.md for project onboarding on other devices ([c7f06bc](https://github.com/GuoSirius/change-image-suffix/commit/c7f06bc9c670b31e3e9af9329cbce96b5d3ed065))
+* add project memory for context-menu fix and codebase context ([e8fb432](https://github.com/GuoSirius/change-image-suffix/commit/e8fb43252cf1288d503c24737b84b2f687e19968))
+
 ### [2.0.2](https://github.com/GuoSirius/change-image-suffix/compare/v2.0.1...v2.0.2) (2026-05-19)
 
 
