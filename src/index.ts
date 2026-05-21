@@ -179,6 +179,11 @@ endlocal
     }
   }
 
+  // 写入版本标记，用于检测 npm update 后自动刷新菜单
+  const versionFile = path.join(appDataDir, 'version.json');
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  fs.writeFileSync(versionFile, JSON.stringify({ version: pkg.version }), 'utf8');
+
   console.log('✅ 右键菜单安装成功！');
   console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式子菜单');
   console.log('   🖼  图片文件上右键       → 悬停展开格式子菜单');
@@ -216,12 +221,38 @@ function uninstallContextMenu(): void {
     } catch { /* ignore */ }
   }
 
-  // 删除批处理文件
+  // 删除批处理文件和版本标记
   const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
   const batPath = path.join(appDataDir, 'cis_file.bat');
   try { fs.unlinkSync(batPath); } catch { /* ignore */ }
+  const versionFile = path.join(appDataDir, 'version.json');
+  try { fs.unlinkSync(versionFile); } catch { /* ignore */ }
 
   console.log('✅ 右键菜单已卸载');
+}
+
+// 自动检测版本变化并更新右键菜单（解决 npm update 不触发 postinstall 的问题）
+function autoUpdateContextMenu(): void {
+  if (os.platform() !== 'win32') return;
+
+  const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
+  const versionFile = path.join(appDataDir, 'version.json');
+
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const currentVersion = pkg.version;
+
+  let installedVersion = '';
+  try {
+    if (fs.existsSync(versionFile)) {
+      installedVersion = JSON.parse(fs.readFileSync(versionFile, 'utf8')).version || '';
+    }
+  } catch { /* ignore */ }
+
+  if (installedVersion !== currentVersion) {
+    try {
+      installContextMenu();
+    } catch { /* menu update failed silently, will retry next invocation */ }
+  }
 }
 
 // ─────────────────────────────────────────
@@ -551,6 +582,9 @@ async function main(): Promise<void> {
     uninstallContextMenu();
     return;
   }
+
+  // 自动检测版本变化并刷新右键菜单（npm update 不触发 postinstall）
+  autoUpdateContextMenu();
 
   console.log('\n🖼️  change-image-suffix - 图片格式批量转换工具\n');
 
