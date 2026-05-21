@@ -6,7 +6,9 @@ import * as os from 'os';
 import { execSync } from 'child_process';
 import sharp from 'sharp';
 
-// 默认配置
+// 支持的输入/输出格式
+const SUPPORTED_INPUT_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'avif'];
+const SUPPORTED_OUTPUT_FORMATS = ['webp', 'jpg', 'jpeg', 'png', 'avif', 'tiff', 'tif'];
 const DEFAULT_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp'];
 const DEFAULT_TARGET_FORMAT = 'webp';
 
@@ -53,16 +55,13 @@ function regDelete(key: string): void {
 function installContextMenu(): void {
   requireWindows();
 
-  // ── 查找 cis.cmd 和 node_modules 路径 ──
+  // ── 查找 cis.cmd 路径 ──
   let cisCmd = '';
-  let nodeModulesDir = '';
   try {
     cisCmd = execSync('where cis.cmd', { encoding: 'utf8' }).trim().split('\n')[0].trim();
-    nodeModulesDir = path.dirname(cisCmd);
   } catch {
     try {
       cisCmd = execSync('where cis', { encoding: 'utf8' }).trim().split('\n')[0].trim();
-      nodeModulesDir = path.dirname(cisCmd);
     } catch {
       console.error('❌ 找不到 cis 命令，请先执行 npm link 或 npm install -g change-image-suffix');
       process.exit(1);
@@ -81,148 +80,61 @@ function installContextMenu(): void {
   }
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
-  // ── 辅助脚本路径定义（需要在 batContent 之前，因为 bat 中引用了 ps1Path）──
   const batPath = path.join(appDataDir, 'cis_file.bat');
-  const ps1Path = path.join(appDataDir, 'cis_getfiles.ps1');
 
-  // cis_getfiles.ps1: 通过 Shell.Application COM 获取 Explorer 选中文件
-  const cisGetfilesContent = `
-Add-Type -AssemblyName Microsoft.VisualBasic
-Add-Type -AssemblyName UIAutomationClient
-$files = @()
-try {
-    $shell = New-Object -ComObject Shell.Application
-    $windows = $shell.Windows()
-    foreach ($win in $windows) {
-        if ($win -and $win.FullName -like "*explorer.exe") {
-            $selected = $win.Document.SelectedItems()
-            foreach ($item in $selected) {
-                if ($item -and $item.Path) {
-                    $files += $item.Path
-                }
-            }
-        }
-    }
-} catch {}
-if ($files.Count -gt 0) {
-    $files | ForEach-Object { $_ }
-} else {
-    Write-Output "NO_FILES"
-}
-`;
-  fs.writeFileSync(ps1Path, cisGetfilesContent, 'utf8');
-
-  // ── bat 脚本：接收 Windows 传递的文件路径和格式参数 ──
-  // 根据 Windows ExtendedSubCommandsKey 机制：
-  // - 子命令的 command 参数（格式）在前
-  // - Windows 自动将父命令收到的文件路径追加在末尾
-  // - 最终执行: cmd /c "bat" "格式" "文件路径"
-  // 移除 AppliesTo 限制后，bat 需要过滤非图片文件
+  // ── bat 脚本：接收格式 + 文件/目录路径，直接调用 cis ──
+  // %1 = 格式, %2 %3 ... = Windows 传入的文件/目录路径
   const batContent = `
 @echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-REM Get this script's directory (no trailing backslash)
-set "SCRIPT_DIR=%~dp0"
-set "SCRIPT_DIR=!SCRIPT_DIR:~0,-1!"
+REM Find cis command in PATH
+set "CIS_CMD="
+for /f "delims=" %%c in ('where cis.cmd 2^>nul') do (
+    if "!CIS_CMD!"=="" set "CIS_CMD=%%c"
+)
+if "!CIS_CMD!"=="" (
+    for /f "delims=" %%c in ('where cis 2^>nul') do (
+        if "!CIS_CMD!"=="" set "CIS_CMD=%%c"
+    )
+)
+if "!CIS_CMD!"=="" (
+    echo [change-image-suffix] cis command not found. Run: npm install -g change-image-suffix
+    pause
+    exit /b 1
+)
 
-REM Get cis.cmd path
-for /f "delims=" %%c in ('where cis.cmd 2^>nul') do set "CIS_CMD=%%c"
-
-REM Supported image extensions
-set "SUPPORTED_EXT=.png;.jpg;.jpeg;.gif;.bmp;.tiff;.tif;.webp;.avif"
-
-REM %1 = format (from subcommand), %2 = file path (from Windows)
 if "%~1"=="" (
-    echo Error: No format specified.
-    timeout /t 2 >nul
-    goto :done
+    echo [change-image-suffix] Error: No format specified.
+    pause
+    exit /b 1
 )
+
 set "format=%~1"
+shift
 
-REM Collect all image files
-set "fileList="
-
-REM Windows passes file path as %2. If multiple files selected, use PowerShell.
-REM Otherwise use direct argument.
-if "%~2"=="" (
-    REM Multi-file via PowerShell (with retries for reliability)
-    for /f "delims=" %%i in ('powershell -ExecutionPolicy Bypass -File "!SCRIPT_DIR!\\cis_getfiles.ps1"') do (
-        if not "%%i"=="NO_FILES" (
-            call :add_if_image "%%i"
-        )
-    )
+set "args="
+:parse
+if "%~1"=="" goto :run
+if exist "%~1\\*" (
+    set "args=!args! -p "%~1""
 ) else (
-    REM Single file or multiple via %2 (space-separated)
-    REM Split space-separated paths
-    for %%F in (%~2) do (
-        call :add_if_image "%%F"
-    )
+    set "args=!args! -f "%~1""
+)
+shift
+goto :parse
+
+:run
+if "!args!"=="" (
+    echo [change-image-suffix] No files or directories to process.
+    pause
+    exit /b 1
 )
 
-REM Process all collected files - use start /b to avoid new window
-if not "!fileList!"=="" (
-    start "" /b cmd /c "!CIS_CMD! -t !format! !fileList!"
-)
-goto :done
-
-:add_if_image
-set "filePath=%~1"
-REM Skip if empty or NO_FILES
-if "!filePath!"=="" exit /b
-if "!filePath!"=="NO_FILES" exit /b
-
-REM Get file extension
-for %%E in ("!filePath!") do set "ext=%%~xE"
-if "!ext!"=="" exit /b
-
-REM Convert to lowercase
-set "ext_lower=!ext!"
-call set "ext_lower=%%ext_lower:A=a%%
-call set "ext_lower=%%ext_lower:B=b%%
-call set "ext_lower=%%ext_lower:C=c%%
-call set "ext_lower=%%ext_lower:D=d%%
-call set "ext_lower=%%ext_lower:E=e%%
-call set "ext_lower=%%ext_lower:F=f%%
-call set "ext_lower=%%ext_lower:G=g%%
-call set "ext_lower=%%ext_lower:H=h%%
-call set "ext_lower=%%ext_lower:I=i%%
-call set "ext_lower=%%ext_lower:J=j%%
-call set "ext_lower=%%ext_lower:K=k%%
-call set "ext_lower=%%ext_lower:L=l%%
-call set "ext_lower=%%ext_lower:M=m%%
-call set "ext_lower=%%ext_lower:N=n%%
-call set "ext_lower=%%ext_lower:O=o%%
-call set "ext_lower=%%ext_lower:P=p%%
-call set "ext_lower=%%ext_lower:Q=q%%
-call set "ext_lower=%%ext_lower:R=r%%
-call set "ext_lower=%%ext_lower:S=s%%
-call set "ext_lower=%%ext_lower:T=t%%
-call set "ext_lower=%%ext_lower:U=u%%
-call set "ext_lower=%%ext_lower:V=v%%
-call set "ext_lower=%%ext_lower:W=w%%
-call set "ext_lower=%%ext_lower:X=x%%
-call set "ext_lower=%%ext_lower:Y=y%%
-call set "ext_lower=%%ext_lower:Z=z%%"
-
-REM Check if extension is supported
-echo !SUPPORTED_EXT! | findstr /i /c:"!ext_lower!" >nul 2>&1
-if !errorlevel!==0 (
-    set "fileList=!fileList! -f "!filePath!""
-)
-exit /b
-
-:done
+"!CIS_CMD!" -t !format! !args!
+if !errorlevel! neq 0 pause
 endlocal
-exit
-
-exit
-
-exit
-
-exit
-
 `;
   fs.writeFileSync(batPath, batContent, 'utf8');
 
@@ -232,10 +144,7 @@ exit
     { verb: 'jpg', label: '📷 JPG' },
     { verb: 'png', label: '🖼 PNG' },
     { verb: 'avif', label: '📺 AVIF' },
-    { verb: 'gif', label: '🎞 GIF' },
     { verb: 'tiff', label: '📋 TIFF' },
-    { verb: 'heif', label: '🍎 HEIF' },
-    { verb: 'jp2', label: '📐 JPEG2000' },
   ];
 
   // ── 使用 ExtendedSubCommandsKey 方式（PowerShell 7 同款）──
@@ -320,12 +229,10 @@ function uninstallContextMenu(): void {
     } catch { /* ignore */ }
   }
 
-  // 删除批处理文件和 PowerShell 脚本
+  // 删除批处理文件
   const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
   const batPath = path.join(appDataDir, 'cis_file.bat');
-  const ps1Path = path.join(appDataDir, 'cis_getfiles.ps1');
   try { fs.unlinkSync(batPath); } catch { /* ignore */ }
-  try { fs.unlinkSync(ps1Path); } catch { /* ignore */ }
 
   console.log('✅ 右键菜单已卸载');
 }
@@ -395,7 +302,8 @@ function parseArgs(): CliOptions {
     }
 
     if (arg === '-v' || arg === '--version') {
-      console.log('change-image-suffix v1.18.0');
+      const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+      console.log(`change-image-suffix v${pkg.version}`);
       process.exit(0);
     }
 
@@ -493,12 +401,12 @@ function printHelp(): void {
   cis uninstall-menu             # 从 Windows 右键菜单移除
 
 选项:
-  -f, --file <file>       转换单个文件（右键文件时自动传入）
+  -f, --file <file>       转换指定文件（可多个，空格分隔）
   -p, --path <dir>        指定工作目录（默认: 当前目录）
   -r, --recursive         递归搜索子目录
   -d, --depth <n>         递归深度限制（需要 -r 选项）
-  -e, --extensions <ext>  指定要转换的后缀，逗号分隔（不含点号）
-  -t, --to <format>       转换到的目标格式（默认: webp）
+  -e, --extensions <ext>  指定源后缀，逗号分隔（不含点号）
+  -t, --to <format>       目标格式: webp, jpg, png, avif, tiff（默认: webp）
   -h, --help              显示帮助信息
   -v, --version           显示版本信息
 
@@ -556,10 +464,8 @@ function getOutputPath(
   const dir = path.dirname(inputPath);
   const ext = path.extname(inputPath);
   const basename = path.basename(inputPath, ext);
-  const originalExt = ext.slice(1).toLowerCase();
   const targetExt = targetFormat;
 
-  // 源格式与目标格式相同时，直接覆盖
   let coreName = basename;
 
   const outputDir = path.join(dir, 'output');
@@ -602,24 +508,34 @@ async function convertImage(
   try {
     const outputPath = getOutputPath(inputPath, targetFormat, allInputFiles);
 
-    // 确保 output 目录存在
     const outputDir = path.dirname(outputPath);
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
+    const srcExt = path.extname(inputPath).slice(1).toLowerCase();
+    const fmt = targetFormat.toLowerCase();
+
+    // 同格式直接复制，避免重新编码导致质量损失
+    if (srcExt === fmt || (srcExt === 'jpeg' && fmt === 'jpg') || (srcExt === 'jpg' && fmt === 'jpeg') || (srcExt === 'tif' && fmt === 'tiff') || (srcExt === 'tiff' && fmt === 'tif')) {
+      fs.copyFileSync(inputPath, outputPath);
+      return { success: true, outputPath };
+    }
+
+    if (!SUPPORTED_OUTPUT_FORMATS.includes(fmt)) {
+      return { success: false, outputPath: inputPath, error: `不支持的目标格式: ${targetFormat}，支持: ${SUPPORTED_OUTPUT_FORMATS.join(', ')}` };
+    }
+
     const image = sharp(inputPath);
 
-    switch (targetFormat.toLowerCase()) {
-      case 'webp': await image.webp({ quality: 85 }).toFile(outputPath); break;
+    switch (fmt) {
+      case 'webp': await image.webp({ quality: 90 }).toFile(outputPath); break;
       case 'jpg':
-      case 'jpeg': await image.jpeg({ quality: 85 }).toFile(outputPath); break;
-      case 'png':  await image.png({ quality: 85 }).toFile(outputPath); break;
-      case 'gif':  await image.gif().toFile(outputPath); break;
+      case 'jpeg': await image.jpeg({ quality: 90 }).toFile(outputPath); break;
+      case 'png':  await image.png({ compressionLevel: 6 }).toFile(outputPath); break;
       case 'tiff':
-      case 'tif':  await image.tiff({ quality: 85 }).toFile(outputPath); break;
-      case 'avif': await image.avif({ quality: 85 }).toFile(outputPath); break;
-      default:     await image.toFormat(targetFormat as any).toFile(outputPath);
+      case 'tif':  await image.tiff({ quality: 90 }).toFile(outputPath); break;
+      case 'avif': await image.avif({ quality: 90 }).toFile(outputPath); break;
     }
 
     return { success: true, outputPath };
@@ -660,13 +576,12 @@ async function main(): Promise<void> {
     console.log(`📦 待处理: ${files.length} 个文件\n`);
     console.log('----------------------------------------\n');
 
-    const supportedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'avif'];
     let totalSuccess = 0;
     let totalFail = 0;
 
     for (const filePath of files) {
       const ext = path.extname(filePath).slice(1).toLowerCase();
-      if (!supportedExts.includes(ext)) {
+      if (!SUPPORTED_INPUT_EXTENSIONS.includes(ext)) {
         console.log(`  ⚠️  跳过（不支持格式）: ${filePath}`);
         totalFail++;
         continue;
@@ -708,8 +623,7 @@ async function main(): Promise<void> {
 
       if (stat.isFile()) {
         const ext = path.extname(inputPath).slice(1).toLowerCase();
-        const supportedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'avif'];
-        if (!supportedExts.includes(ext)) {
+        if (!SUPPORTED_INPUT_EXTENSIONS.includes(ext)) {
           console.log(`  ⚠️  跳过（不支持格式）: ${inputPath}`);
           totalFail++;
           continue;

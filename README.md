@@ -68,10 +68,7 @@ cis uninstall-menu
   ├── 📷 JPG
   ├── 🖼 PNG
   ├── 📺 AVIF
-  ├── 🎞 GIF
-  ├── 📋 TIFF
-  ├── 🍎 HEIF
-  └── 📐 JPEG2000
+  └── 📋 TIFF
 ```
 
 **适用场景：**
@@ -152,7 +149,7 @@ cis uninstall-menu
 | 类型 | 格式 |
 |------|------|
 | **输入** | png, jpg, jpeg, gif, bmp, tiff, webp, avif |
-| **输出** | webp, jpg, png, avif, gif, tiff, heif, jp2 |
+| **输出** | webp, jpg, png, avif, tiff |
 
 ---
 
