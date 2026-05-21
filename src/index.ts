@@ -9,7 +9,7 @@ import sharp from 'sharp';
 // 支持的输入/输出格式
 const SUPPORTED_INPUT_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'avif'];
 const SUPPORTED_OUTPUT_FORMATS = ['webp', 'jpg', 'jpeg', 'png', 'avif', 'tiff', 'tif'];
-const DEFAULT_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp'];
+const DEFAULT_EXTENSIONS = [...SUPPORTED_INPUT_EXTENSIONS];
 const DEFAULT_TARGET_FORMAT = 'webp';
 
 interface CliOptions {
@@ -33,17 +33,6 @@ function requireWindows(): void {
   }
 }
 
-/**
- * 写注册表 key（调用 reg.exe，无需管理员权限写 HKCU）
- */
-function regAdd(key: string, name: string, value: string, type = 'REG_SZ'): void {
-  const cmd = `reg add "${key}" /v "${name}" /t ${type} /d "${value}" /f`;
-  execSync(cmd, { stdio: 'ignore' });
-}
-function regAddDefault(key: string, value: string): void {
-  const cmd = `reg add "${key}" /ve /d "${value}" /f`;
-  execSync(cmd, { stdio: 'ignore' });
-}
 function regDelete(key: string): void {
   try {
     execSync(`reg delete "${key}" /f`, { stdio: 'ignore' });
@@ -147,10 +136,8 @@ endlocal
     { verb: 'tiff', label: '📋 TIFF' },
   ];
 
-  // ── 使用 ExtendedSubCommandsKey 方式（PowerShell 7 同款）──
-  // 主菜单项配置（每个菜单类型有独立的子菜单路径）
-  // 注意：文件右键和目录右键都使用 bat + PowerShell 获取选中文件
-  // 这样混合选择时也能处理所有选中项
+  // ── 使用 ExtendedSubCommandsKey 方式 ──
+  // 文件右键和目录右键均使用 bat 脚本，混合选择时自动分类文件和目录
   const menuBases = [
     { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
     { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', useBat: true },
@@ -406,7 +393,7 @@ function printHelp(): void {
   -r, --recursive         递归搜索子目录
   -d, --depth <n>         递归深度限制（需要 -r 选项）
   -e, --extensions <ext>  指定源后缀，逗号分隔（不含点号）
-  -t, --to <format>       目标格式: webp, jpg, png, avif, tiff（默认: webp）
+  -t, --to <format>       目标格式: webp, jpg/jpeg, png, avif, tiff/tif（默认: webp）
   -h, --help              显示帮助信息
   -v, --version           显示版本信息
 

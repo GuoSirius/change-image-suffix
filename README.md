@@ -8,7 +8,7 @@
 - 🔄 支持递归搜索子目录
 - 📏 支持递归深度限制
 - 🎯 支持指定源文件后缀（png, jpg, gif 等）
-- 🎨 支持多种目标格式（webp, jpg, png, avif, gif）
+- 🎨 支持多种目标格式（webp, jpg, png, avif, tiff）
 - 📤 输出到 `output/` 子目录
 - 🔢 同名不同后缀文件自动编号（`_01`, `_02`）
 - 🖱️ Windows 右键菜单集成
@@ -91,7 +91,7 @@ cis uninstall-menu
 | `-p, --path <dir>` | 指定工作目录 | 当前目录 |
 | `-r, --recursive` | 递归搜索子目录 | 否 |
 | `-d, --depth <n>` | 递归深度限制 | 无限制 |
-| `-e, --extensions` | 指定源后缀，逗号分隔 | png,jpg,jpeg,gif,bmp,tiff,webp |
+| `-e, --extensions` | 指定源后缀，逗号分隔 | png,jpg,jpeg,gif,bmp,tiff,tif,webp,avif |
 | `-t, --to <format>` | 目标格式 | webp |
 | `-f, --file <file>` | 指定单个文件转换 | - |
 | `-h, --help` | 显示帮助 | - |
@@ -279,14 +279,21 @@ npm run release:major   # 重大变更
 ## 项目结构
 
 ```
+├── .claude/              # Claude Code 项目记忆与设置
+│   ├── MEMORY.md
+│   ├── memory/
+│   └── settings.local.json
 ├── .github/workflows/   # GitHub Actions 工作流
 │   └── release.yml      # 自动发布工作流
 ├── .husky/              # Git 钩子
 │   └── commit-msg       # 提交信息校验钩子
 ├── scripts/             # 脚本目录
-│   └── release.js       # 一键发布脚本
+│   ├── release.js       # 一键发布脚本
+│   ├── postinstall.js   # npm postinstall 钩子（自动注册右键菜单）
+│   └── preuninstall.js  # npm preuninstall 钩子（自动清理右键菜单）
 ├── src/                 # 源代码
 │   └── index.ts         # 主入口
+├── CLAUDE.md            # 项目上下文文档
 ├── .commitlintrc.json   # commitlint 配置
 ├── CHANGELOG.md         # 变更日志
 └── package.json         # 项目配置
