@@ -8,7 +8,9 @@
     "assets/",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "scripts/postinstall.js",
+    "scripts/preuninstall.js"
   ],
   "bin": {
     "change-image-suffix": "./dist/index.js",
@@ -21,13 +23,15 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsc",
+    "dev": "tsc --watch",
+    "postinstall": "node scripts/postinstall.js",
+    "preuninstall": "node scripts/preuninstall.js",
     "prepublishOnly": "npm run clean && npm run build",
     "release": "node scripts/release.js",
     "release:patch": "node scripts/release.js --patch",
     "release:minor": "node scripts/release.js --minor",
     "release:major": "node scripts/release.js --major",
-    "lint": "echo \"Linting not configured yet\"",
-    "lint:fix": "echo \"Linting fix not configured yet\"",
+    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
