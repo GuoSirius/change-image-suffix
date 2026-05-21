@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.1](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.0...v2.1.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* unify format constants, remove dead code, sync docs with source ([c1e7700](https://github.com/GuoSirius/change-image-suffix/commit/c1e7700ee5f5a0142c98f5a1e95bc6453317a4a9))
+
 ## [2.1.0](https://github.com/GuoSirius/change-image-suffix/compare/v2.0.2...v2.1.0) (2026-05-21)
 
 
