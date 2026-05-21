@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.2](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.1...v2.1.2) (2026-05-21)
+
+
+### Bug Fixes
+
+* add stdio inherit to release.js git commands for visible output ([7644eba](https://github.com/GuoSirius/change-image-suffix/commit/7644ebab76a090fd199cf1429edc0ccfa4a25323))
+
 ### [2.1.1](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.0...v2.1.1) (2026-05-21)
 
 
