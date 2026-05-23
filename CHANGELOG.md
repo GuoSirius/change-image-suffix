@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.5](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.4...v2.1.5) (2026-05-23)
+
+
+### Chores
+
+* upgrade deps (sharp 0.34, TS6, @types/node 25), migrate to ESM, require node >=24 ([d3a3234](https://github.com/GuoSirius/change-image-suffix/commit/d3a323410ccd1f5ed9f04443adc25c6edd96f7df))
+
 ### [2.1.4](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.3...v2.1.4) (2026-05-23)
 
 
