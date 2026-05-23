@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.4](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.3...v2.1.4) (2026-05-23)
+
+
+### Bug Fixes
+
+* output to <format>/ dir, command injection, recursive nesting, and other issues ([32da38a](https://github.com/GuoSirius/change-image-suffix/commit/32da38aef36a7d736e91e0375573a905d565d864))
+
+
+### Chores
+
+* update local settings permissions ([1a86130](https://github.com/GuoSirius/change-image-suffix/commit/1a86130de6005348d6ba8aaba26500d7688be996))
+
+
+### Documentation
+
+* update README output convention, add .claude/ commit policy memory ([b689bc6](https://github.com/GuoSirius/change-image-suffix/commit/b689bc60ed397eb826954e289c3f89488bd97449))
+
 ### [2.1.3](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.2...v2.1.3) (2026-05-21)
 
 
