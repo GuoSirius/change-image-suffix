@@ -4,7 +4,11 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(npm run *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(rm -rf node_modules package-lock.json)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(rm -rf assets/webp)"
     ]
   }
 }
