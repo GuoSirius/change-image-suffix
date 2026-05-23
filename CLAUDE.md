@@ -36,7 +36,7 @@ scripts/preuninstall.js # npm hook: auto-cleanup context menu before uninstall
 
 - **Shebang**: `#!/usr/bin/env node` at top of `src/index.ts`
 - **Dual bin name**: `change-image-suffix` and `cis` (short alias)
-- **Output convention**: converted files go to `<source>/output/` subdirectory
+- **Output convention**: converted files go to `<source>/<targetFormat>/` subdirectory (e.g., `webp/`, `jpg/`)
 - **Naming conflict resolution**: same basename + different extensions → `_01`, `_02` suffixes
 - **Same-format copy**: if source ext matches target format, file is copied directly (no re-encode)
 - **Committed files**: dist/ is gitignored (built on prepublishOnly), src/ is the source of truth

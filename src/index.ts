@@ -188,7 +188,7 @@ endlocal
   console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式子菜单');
   console.log('   🖼  图片文件上右键       → 悬停展开格式子菜单');
   console.log('   ⚠️  非图片文件右键       → 菜单显示但不处理');
-  console.log(`   📂 输出目录: <原目录>/output/`);
+  console.log(`   📂 输出目录: <原目录>/<目标格式>/`);
   console.log('\n💡 提示：如需卸载，执行 cis uninstall-menu');
 }
 
@@ -221,12 +221,16 @@ function uninstallContextMenu(): void {
     } catch { /* ignore */ }
   }
 
-  // 删除批处理文件和版本标记
+  // 删除批处理文件、图标和版本标记
   const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
   const batPath = path.join(appDataDir, 'cis_file.bat');
   try { fs.unlinkSync(batPath); } catch { /* ignore */ }
+  const iconPath = path.join(appDataDir, 'icon.ico');
+  try { fs.unlinkSync(iconPath); } catch { /* ignore */ }
   const versionFile = path.join(appDataDir, 'version.json');
   try { fs.unlinkSync(versionFile); } catch { /* ignore */ }
+  // 尝试删除目录（仅当为空时），失败也不影响
+  try { fs.rmdirSync(appDataDir); } catch { /* ignore */ }
 
   console.log('✅ 右键菜单已卸载');
 }
@@ -238,20 +242,23 @@ function autoUpdateContextMenu(): void {
   const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
   const versionFile = path.join(appDataDir, 'version.json');
 
+  // 如果从未安装过右键菜单，跳过自动更新（postinstall 负责首次安装）
+  if (!fs.existsSync(versionFile)) return;
+
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
   const currentVersion = pkg.version;
 
   let installedVersion = '';
   try {
-    if (fs.existsSync(versionFile)) {
-      installedVersion = JSON.parse(fs.readFileSync(versionFile, 'utf8')).version || '';
-    }
+    installedVersion = JSON.parse(fs.readFileSync(versionFile, 'utf8')).version || '';
   } catch { /* ignore */ }
 
   if (installedVersion !== currentVersion) {
     try {
       installContextMenu();
-    } catch { /* menu update failed silently, will retry next invocation */ }
+    } catch {
+      console.warn('⚠️  右键菜单自动更新失败，请手动执行 cis install-menu');
+    }
   }
 }
 
@@ -287,28 +294,38 @@ function parseArgs(): CliOptions {
     }
 
     if (arg === '-d' || arg === '--depth') {
-      if (i + 1 < args.length) {
-        options.maxDepth = parseInt(args[++i], 10);
-        if (isNaN(options.maxDepth) || options.maxDepth < 1) {
+      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        const val = parseInt(args[++i], 10);
+        if (isNaN(val) || val < 1) {
           console.error('❌ 深度必须是正整数');
           process.exit(1);
         }
+        options.maxDepth = val;
+      } else {
+        console.error('❌ -d/--depth 需要指定一个正整数参数');
+        process.exit(1);
       }
       i++;
       continue;
     }
 
     if (arg === '-e' || arg === '--extensions') {
-      if (i + 1 < args.length) {
+      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
         options.extensions = args[++i].split(',').map(e => e.trim().toLowerCase().replace(/^\./, ''));
+      } else {
+        console.error('❌ -e/--extensions 需要指定后缀参数');
+        process.exit(1);
       }
       i++;
       continue;
     }
 
     if (arg === '-t' || arg === '--to') {
-      if (i + 1 < args.length) {
+      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
         options.targetFormat = args[++i].trim().toLowerCase().replace(/^\./, '');
+      } else {
+        console.error('❌ -t/--to 需要指定目标格式');
+        process.exit(1);
       }
       i++;
       continue;
@@ -342,9 +359,14 @@ function parseArgs(): CliOptions {
 
     if (arg === '-f' || arg === '--file') {
       // 收集 -f 后的所有文件
+      const start = i + 1;
       while (i + 1 < args.length && !args[i + 1].startsWith('-')) {
         i++;
         filesFromFlag.push(path.resolve(args[i]));
+      }
+      if (start > i) {
+        console.error('❌ -f/--file 需要指定至少一个文件路径');
+        process.exit(1);
       }
       i++;
       continue;
@@ -448,7 +470,8 @@ function getAllFiles(
   extensions: string[],
   recursive: boolean,
   currentDepth: number,
-  maxDepth: number
+  maxDepth: number,
+  excludeDirName?: string
 ): string[] {
   const files: string[] = [];
 
@@ -459,7 +482,8 @@ function getAllFiles(
       const fullPath = path.join(dir, entry.name);
 
       if (entry.isDirectory() && recursive && currentDepth < maxDepth) {
-        files.push(...getAllFiles(fullPath, extensions, recursive, currentDepth + 1, maxDepth));
+        if (excludeDirName && entry.name === excludeDirName) continue;
+        files.push(...getAllFiles(fullPath, extensions, recursive, currentDepth + 1, maxDepth, excludeDirName));
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).slice(1).toLowerCase();
         if (extensions.includes(ext)) {
@@ -486,7 +510,7 @@ function getOutputPath(
 
   let coreName = basename;
 
-  const outputDir = path.join(dir, 'output');
+  const outputDir = path.join(dir, targetFormat);
 
   // 检查输入目录中是否有同名（不含扩展名）但不同后缀的文件
   // 如 photo.png 和 photo.jpg 会被判定为同名冲突
@@ -495,7 +519,7 @@ function getOutputPath(
     const fDir = path.dirname(f);
     const fExt = path.extname(f);
     const fBasename = path.basename(f, fExt);
-    return fDir === dir && fBasename === basename && fExt.toLowerCase() !== ext.toLowerCase();
+    return fDir === dir && fBasename.toLowerCase() === basename.toLowerCase() && fExt.toLowerCase() !== ext.toLowerCase();
   });
 
   if (hasNameConflict) {
@@ -505,7 +529,7 @@ function getOutputPath(
       const fDir = path.dirname(f);
       const fExt = path.extname(f);
       const fBasename = path.basename(f, fExt);
-      return fDir === dir && fBasename === basename;
+      return fDir === dir && fBasename.toLowerCase() === basename.toLowerCase();
     });
     // 当前文件在所有同名文件中的索引（从1开始）
     const sortedMatches = [...allBasenameMatches, inputPath].sort();
@@ -523,25 +547,25 @@ async function convertImage(
   targetFormat: string,
   allInputFiles: string[]
 ): Promise<{ success: boolean; outputPath: string; error?: string }> {
-  try {
-    const outputPath = getOutputPath(inputPath, targetFormat, allInputFiles);
+  const outputPath = getOutputPath(inputPath, targetFormat, allInputFiles);
+  const srcExt = path.extname(inputPath).slice(1).toLowerCase();
+  const fmt = targetFormat.toLowerCase();
 
+  // 先验证格式，避免在无效路径上创建目录
+  if (!SUPPORTED_OUTPUT_FORMATS.includes(fmt)) {
+    return { success: false, outputPath, error: `不支持的目标格式: ${targetFormat}，支持: ${SUPPORTED_OUTPUT_FORMATS.join(', ')}` };
+  }
+
+  try {
     const outputDir = path.dirname(outputPath);
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    const srcExt = path.extname(inputPath).slice(1).toLowerCase();
-    const fmt = targetFormat.toLowerCase();
-
     // 同格式直接复制，避免重新编码导致质量损失
     if (srcExt === fmt || (srcExt === 'jpeg' && fmt === 'jpg') || (srcExt === 'jpg' && fmt === 'jpeg') || (srcExt === 'tif' && fmt === 'tiff') || (srcExt === 'tiff' && fmt === 'tif')) {
       fs.copyFileSync(inputPath, outputPath);
       return { success: true, outputPath };
-    }
-
-    if (!SUPPORTED_OUTPUT_FORMATS.includes(fmt)) {
-      return { success: false, outputPath: inputPath, error: `不支持的目标格式: ${targetFormat}，支持: ${SUPPORTED_OUTPUT_FORMATS.join(', ')}` };
     }
 
     const image = sharp(inputPath);
@@ -560,7 +584,7 @@ async function convertImage(
   } catch (err) {
     return {
       success: false,
-      outputPath: inputPath,
+      outputPath,
       error: err instanceof Error ? err.message : '未知错误'
     };
   }
@@ -599,18 +623,20 @@ async function main(): Promise<void> {
 
     let totalSuccess = 0;
     let totalFail = 0;
+    const failures: string[] = [];
 
     for (const filePath of files) {
       const ext = path.extname(filePath).slice(1).toLowerCase();
       if (!SUPPORTED_INPUT_EXTENSIONS.includes(ext)) {
         console.log(`  ⚠️  跳过（不支持格式）: ${filePath}`);
         totalFail++;
+        failures.push(filePath);
         continue;
       }
 
       console.log(`  📄 文件: ${filePath}`);
       process.stdout.write(`     处理中: ${path.basename(filePath)} ... `);
-      const result = await convertImage(filePath, options.targetFormat, [filePath]);
+      const result = await convertImage(filePath, options.targetFormat, files);
 
       if (result.success) {
         console.log(`✅ -> ${path.relative(path.dirname(filePath), result.outputPath)}`);
@@ -618,6 +644,14 @@ async function main(): Promise<void> {
       } else {
         console.log(`❌ 失败 (${result.error})`);
         totalFail++;
+        failures.push(filePath);
+      }
+    }
+
+    if (failures.length > 0) {
+      console.log('\n❌ 失败的文件:');
+      for (const f of failures) {
+        console.log(`   - ${f}`);
       }
     }
 
@@ -632,6 +666,7 @@ async function main(): Promise<void> {
 
     let totalSuccess = 0;
     let totalFail = 0;
+    const failures: string[] = [];
 
     for (const inputPath of dirs) {
       const stat = fs.existsSync(inputPath) ? fs.statSync(inputPath) : null;
@@ -639,6 +674,7 @@ async function main(): Promise<void> {
       if (!stat) {
         console.log(`  ⚠️  跳过（不存在）: ${inputPath}`);
         totalFail++;
+        failures.push(inputPath);
         continue;
       }
 
@@ -647,21 +683,23 @@ async function main(): Promise<void> {
         if (!SUPPORTED_INPUT_EXTENSIONS.includes(ext)) {
           console.log(`  ⚠️  跳过（不支持格式）: ${inputPath}`);
           totalFail++;
+          failures.push(inputPath);
           continue;
         }
 
         console.log(`  📄 文件: ${inputPath}`);
         process.stdout.write(`     处理中: ${path.basename(inputPath)} ... `);
-        const result = await convertImage(inputPath, options.targetFormat, [inputPath]);
+        const result = await convertImage(inputPath, options.targetFormat, dirs);
         if (result.success) {
           console.log(`✅ -> ${path.relative(path.dirname(inputPath), result.outputPath)}`);
           totalSuccess++;
         } else {
           console.log(`❌ 失败 (${result.error})`);
           totalFail++;
+          failures.push(inputPath);
         }
       } else {
-        const files = getAllFiles(inputPath, options.extensions, options.recursive, 0, options.maxDepth);
+        const files = getAllFiles(inputPath, options.extensions, options.recursive, 0, options.maxDepth, options.targetFormat);
         console.log(`  📁 目录: ${inputPath} (${files.length} 个文件)`);
 
         if (files.length === 0) {
@@ -678,8 +716,16 @@ async function main(): Promise<void> {
           } else {
             console.log(`❌ (${result.error})`);
             totalFail++;
+            failures.push(file);
           }
         }
+      }
+    }
+
+    if (failures.length > 0) {
+      console.log('\n❌ 失败的文件:');
+      for (const f of failures) {
+        console.log(`   - ${f}`);
       }
     }
 
@@ -721,7 +767,7 @@ async function main(): Promise<void> {
   console.log(`🎯 目标格式: ${options.targetFormat}`);
   console.log('\n----------------------------------------\n');
 
-  const files = getAllFiles(options.directory, options.extensions, options.recursive, 0, options.maxDepth);
+  const files = getAllFiles(options.directory, options.extensions, options.recursive, 0, options.maxDepth, options.targetFormat);
 
   if (files.length === 0) {
     console.log('✅ 没有找到需要转换的图片文件。');

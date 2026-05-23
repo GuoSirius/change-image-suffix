@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const { prompt } = require('enquirer');
 const fs = require('fs');
 const path = require('path');
@@ -79,7 +79,7 @@ async function main() {
         if (!value.trim()) {
           return '提交信息不能为空';
         }
-        if (!/^(feat|fix|docs|style|refactor|perf|test|chore)(\([^)]+\))?: .+/.test(value)) {
+        if (!/^(feat|fix|docs|style|refactor|perf|test|chore)(\([^)]+\))?: .*\S.*$/.test(value)) {
           return '提交信息格式不正确，应符合Conventional Commits规范，例如: feat(auth): add login feature';
         }
         return true;
@@ -87,10 +87,10 @@ async function main() {
     });
 
     console.log('\n执行 git add...');
-    execSync('git add .');
+    execSync('git add -u');
 
     console.log('执行 git commit...');
-    execSync(`git commit -m "${response.commitMessage}"`, { stdio: 'inherit' });
+    execFileSync('git', ['commit', '-m', response.commitMessage], { stdio: 'inherit' });
     console.log('✅ 提交成功\n');
   }
 
