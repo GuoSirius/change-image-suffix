@@ -1,1 +1,2 @@
+- [claude-dir-committed](memory/claude-dir-committed.md) — .claude/ directory is committed to the repo, always stage its changes with code changes
 - [context-menu-bat-fix](memory/context-menu-bat-fix.md) — Right-click context menu bat script rewritten, format cleanup, lifecycle hooks added (2026-05-21)

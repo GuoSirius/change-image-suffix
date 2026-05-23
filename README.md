@@ -9,7 +9,7 @@
 - 📏 支持递归深度限制
 - 🎯 支持指定源文件后缀（png, jpg, gif 等）
 - 🎨 支持多种目标格式（webp, jpg, png, avif, tiff）
-- 📤 输出到 `output/` 子目录
+- 📤 输出到 `<目标格式>/` 子目录（如 `webp/`, `jpg/`）
 - 🔢 同名不同后缀文件自动编号（`_01`, `_02`）
 - 🖱️ Windows 右键菜单集成
 - ⚡ 基于 [sharp](https://sharp.pixel.glass/) 高性能图片处理
@@ -101,7 +101,7 @@ cis uninstall-menu
 
 ## 文件命名规范
 
-转换后的文件输出到 **`output/`** 子目录下，命名规则如下：
+转换后的文件输出到 **`<目标格式>/`** 子目录下（例如转换为 webp 则输出到 `webp/`，转换为 jpg 则输出到 `jpg/`），命名规则如下：
 
 ### 同名不同后缀 → 自动编号
 
@@ -109,34 +109,36 @@ cis uninstall-menu
 
 ```
 源目录:  photo.png + photo.jpg + photo.gif
-输出:    output/photo_01.webp
-        output/photo_02.webp
-        output/photo_03.webp
+输出:    webp/photo_01.webp
+        webp/photo_02.webp
+        webp/photo_03.webp
 ```
 
 ### 不同名或不同文件 → 直接覆盖
 
 ```
 源目录:  banner.png + logo.jpg
-输出:    output/banner.webp
-        output/logo.webp
+输出:    webp/banner.webp
+        webp/logo.webp
 ```
 
 ### 同格式转换 → 直接覆盖
 
 ```
 源目录:  photo.webp
-输出:    output/photo.webp  (直接覆盖，无双重后缀)
+输出:    webp/photo.webp  (直接复制，无双重后缀)
 ```
 
 ### 输出目录结构
 
 ```
 📁 原目录/
-├── 📁 output/          ← 转换后的文件
+├── 📁 webp/             ← 转换后的 webp 文件
 │   ├── photo.webp
-│   ├── banner.jpg
-│   └── photo_01.png
+│   ├── banner.webp
+│   └── photo_01.webp
+├── 📁 jpg/              ← 转换后的 jpg 文件
+│   └── ...
 ├── photo.png
 ├── banner.jpg
 └── logo.gif
@@ -193,14 +195,14 @@ cis -f ./avatar.png -t webp
 ### 示例 6：多选文件/目录批量转换
 
 ```bash
-# 多选文件（空格分隔），每个文件的输出在其所在目录的 output/
+# 多选文件（空格分隔），每个文件的输出在其所在目录的 <目标格式>/
 cis ./photo1.png ./photo2.jpg ./folder3
 
 # 多选多个目录
 cis ./images ./icons ./logos
 ```
 
-> 💡 **多选时**：每个文件/目录的输出结果放在**各自所在目录的 `output/` 子目录**中，互不干扰。
+> 💡 **多选时**：每个文件/目录的输出结果放在**各自所在目录的 `<目标格式>/` 子目录**中（如 `webp/`, `jpg/`），互不干扰。
 
 ---
 
