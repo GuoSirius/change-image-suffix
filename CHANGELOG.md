@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.6](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.5...v2.1.6) (2026-05-25)
+
+
+### Bug Fixes
+
+* use inline shell sub-keys instead of ExtendedSubCommandsKey for context menu ([2f50376](https://github.com/GuoSirius/change-image-suffix/commit/2f50376a62a17bcf317530e0662f5b2d718d53d0))
+
+
+### Chores
+
+* update local settings permissions and refresh lockfile ([71d0c1e](https://github.com/GuoSirius/change-image-suffix/commit/71d0c1e6124006e827a3c0d078f9cc47699a3f4c))
+
 ### [2.1.5](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.4...v2.1.5) (2026-05-23)
 
 
