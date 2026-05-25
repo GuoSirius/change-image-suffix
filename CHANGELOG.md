@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.16](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.15...v2.1.16) (2026-05-25)
+
+
+### Bug Fixes
+
+* use "%1" with MultiSelectModel instead of %* for mixed selection ([ce5099c](https://github.com/GuoSirius/change-image-suffix/commit/ce5099cd452128e8193663dcb95560708428c2a2))
+
 ### [2.1.15](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.14...v2.1.15) (2026-05-25)
 
 
