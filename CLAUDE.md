@@ -55,8 +55,8 @@ scripts/preuninstall.js # npm hook: auto-cleanup context menu before uninstall
 - Calls `node.exe` directly from registry (no bat/cmd, avoids code-page encoding issues)
 - All paths include `--pause` flag; cis only pauses on conversion failures
 - Path quoting: `"%V"`/`"%1"` in registry commands; `resolveSplitPath()` in parseArgs as safety net
-- `Directory\Background` → `-p "%V"`, `Directory` → `-p "%1"`, `*` (file) → `-f "%1"`
-- Multi-select: Windows creates separate process invocations per item (no MultiSelectModel)
+- `Directory\Background` → `-p "%V"`, `AllFilesystemObjects` → `%*` (positional, auto-detect)
+- `MultiSelectModel=Player` on `AllFilesystemObjects` for single-window multi-select
 
 ## Commit Convention
 
