@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.7](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.6...v2.1.7) (2026-05-25)
+
+
+### Bug Fixes
+
+* add %1 to context menu bat commands so selected files are passed ([db6cf30](https://github.com/GuoSirius/change-image-suffix/commit/db6cf300839e12ec0229057b25299e50f37f4b6b))
+
 ### [2.1.6](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.5...v2.1.6) (2026-05-25)
 
 
