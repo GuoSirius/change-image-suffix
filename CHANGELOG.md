@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.17](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.16...v2.1.17) (2026-05-25)
+
+
+### Bug Fixes
+
+* use .reg file instead of reg add to avoid cmd.exe quote mangling ([142f410](https://github.com/GuoSirius/change-image-suffix/commit/142f4107f32b8615080018a9c5ec908bb950ac1b))
+
 ### [2.1.16](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.15...v2.1.16) (2026-05-25)
 
 
