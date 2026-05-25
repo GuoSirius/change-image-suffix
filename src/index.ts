@@ -107,13 +107,13 @@ if "%~1"=="" (
 set "format=%~1"
 shift
 
-set "args="
+set args=
 :parse
 if "%~1"=="" goto :run
 if exist "%~1\\*" (
-    set "args=!args! -p "%~1""
+    set args=!args! -p "%~1"
 ) else (
-    set "args=!args! -f "%~1""
+    set args=!args! -f "%~1"
 )
 shift
 goto :parse
@@ -126,7 +126,7 @@ if "!args!"=="" (
 )
 
 "!CIS_CMD!" -t !format! !args!
-if !errorlevel! neq 0 pause
+pause
 endlocal
 `;
   fs.writeFileSync(batPath, batContent, 'utf8');
