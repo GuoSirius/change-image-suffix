@@ -665,23 +665,28 @@ async function main(): Promise<void> {
     return { success: totalSuccess, fail: totalFail };
   }
 
+  let totalFail = 0;
+
   // ─── 混合模式：同时有文件和目录 ───
   if (options.multiFiles && options.multiFiles.length > 0 && options.multiPaths && options.multiPaths.length > 0) {
     console.log('\n🖼️  change-image-suffix - 混合模式（文件+目录）\n');
     const fileResult = await processFiles(options.multiFiles, '图片转换工具');
     console.log('\n');
     const dirResult = await processDirs(options.multiPaths);
+    totalFail = fileResult.fail + dirResult.fail;
     console.log('\n----------------------------------------');
-    console.log(`📊 转换完成！成功: ${fileResult.success + dirResult.success}, 失败: ${fileResult.fail + dirResult.fail}\n`);
+    console.log(`📊 转换完成！成功: ${fileResult.success + dirResult.success}, 失败: ${totalFail}\n`);
   } else if (options.multiFiles && options.multiFiles.length > 0) {
     // ─── 单/多文件模式 ───
     const result = await processFiles(options.multiFiles, '图片转换工具');
+    totalFail = result.fail;
     console.log('\n----------------------------------------\n');
     console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
   } else if (options.multiPaths) {
     // ─── 多路径模式 ───
     console.log(`\n🖼️  change-image-suffix - 批量转换工具\n`);
     const result = await processDirs(options.multiPaths);
+    totalFail = result.fail;
     console.log('\n----------------------------------------');
     console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
   } else {
@@ -721,6 +726,8 @@ async function main(): Promise<void> {
         }
       }
 
+      totalFail = failCount;
+
       console.log('\n----------------------------------------');
       console.log(`\n📊 转换完成！成功: ${successCount}, 失败: ${failCount}\n`);
 
@@ -733,8 +740,8 @@ async function main(): Promise<void> {
     }
   }
 
-  // 右键菜单调用时暂停，让用户看到输出
-  if (process.argv.includes('--pause')) {
+  // 右键菜单调用时，仅在有失败时暂停让用户查看
+  if (process.argv.includes('--pause') && totalFail > 0) {
     console.log('\n按任意键退出...');
     process.stdin.setRawMode(true);
     process.stdin.resume();
