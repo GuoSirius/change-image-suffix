@@ -8,7 +8,9 @@
       "Bash(rm -rf node_modules package-lock.json)",
       "Bash(npm install *)",
       "Bash(npx tsc *)",
-      "Bash(rm -rf assets/webp)"
+      "Bash(rm -rf assets/webp)",
+      "Bash(ls node_modules/.bin/tsc)",
+      "Bash(./node_modules/.bin/tsc)"
     ]
   }
 }
