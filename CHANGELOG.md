@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.12](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.11...v2.1.12) (2026-05-25)
+
+
+### Bug Fixes
+
+* remove quotes around %1/%V to avoid double-quoting by Windows ([ac0c771](https://github.com/GuoSirius/change-image-suffix/commit/ac0c7719f8af7f3ced55a7968d926f2da80ca951))
+
 ### [2.1.11](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.10...v2.1.11) (2026-05-25)
 
 
