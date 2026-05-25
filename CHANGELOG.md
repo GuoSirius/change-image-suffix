@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.18](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.17...v2.1.18) (2026-05-25)
+
+
+### Bug Fixes
+
+* remove emojis from menu labels, remove MultiSelectModel ([a991d75](https://github.com/GuoSirius/change-image-suffix/commit/a991d7534416901746456d879a52fb5a4bc4661b))
+* use %* with MultiSelectModel=Player for single-window multi-select ([4b5b94b](https://github.com/GuoSirius/change-image-suffix/commit/4b5b94be3128f9a438bfff099ccb53d3ef0ef683))
+
 ### [2.1.17](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.16...v2.1.17) (2026-05-25)
 
 
