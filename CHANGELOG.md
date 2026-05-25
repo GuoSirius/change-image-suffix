@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.8](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.7...v2.1.8) (2026-05-25)
+
+
+### Bug Fixes
+
+* remove nested quotes from bat set commands to handle paths with spaces ([becd55f](https://github.com/GuoSirius/change-image-suffix/commit/becd55f3dbf669b295b7e8f5b006e9939da910ac))
+
 ### [2.1.7](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.6...v2.1.7) (2026-05-25)
 
 
