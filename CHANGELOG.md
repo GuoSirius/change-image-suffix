@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.13](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.12...v2.1.13) (2026-05-25)
+
+
+### Bug Fixes
+
+* only pause on --pause when there are failures ([131b316](https://github.com/GuoSirius/change-image-suffix/commit/131b3163ef7752bb987915b5d17ec4e19bc02c0d))
+* reconstruct paths split by Windows at spaces in context menu args ([5173554](https://github.com/GuoSirius/change-image-suffix/commit/5173554733b13f80b490e695d9ba6343d8ad192a))
+* use -p %V for Directory Background, rely on resolveSplitPath ([85bf5b9](https://github.com/GuoSirius/change-image-suffix/commit/85bf5b9cefb362422db1a587368a8d983eaa3dda))
+
 ### [2.1.12](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.11...v2.1.12) (2026-05-25)
 
 
