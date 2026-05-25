@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.9](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.8...v2.1.9) (2026-05-25)
+
+
+### Bug Fixes
+
+* replace bat if/else blocks with goto to handle paths with parentheses ([47cff5a](https://github.com/GuoSirius/change-image-suffix/commit/47cff5ad7d50b60f41628dd1fe9bcf869a74e85e))
+
 ### [2.1.8](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.7...v2.1.8) (2026-05-25)
 
 
