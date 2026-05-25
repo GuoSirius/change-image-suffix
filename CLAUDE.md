@@ -52,9 +52,11 @@ scripts/preuninstall.js # npm hook: auto-cleanup context menu before uninstall
 
 - Installed via `cis install-menu` — writes to HKCU (no admin required)
 - Uses `ExtendedSubCommandsKey` for cascading format submenu (webp/jpg/png/avif/tiff)
-- Bat script stored in `%APPDATA%/change-image-suffix/cis_file.bat`
-- `Directory\Background` → `-p "%V"` (direct CLI call)
-- `Directory` and `*` (file) → bat script handles files and directories
+- Calls `node.exe` directly from registry (no bat/cmd, avoids code-page encoding issues)
+- All paths include `--pause` flag; cis only pauses on conversion failures
+- Path quoting: `"%V"`/`"%1"` in registry commands; `resolveSplitPath()` in parseArgs as safety net
+- `Directory\Background` → `-p "%V"`, `Directory` → `-p "%1"`, `*` (file) → `-f "%1"`
+- Multi-select: Windows creates separate process invocations per item (no MultiSelectModel)
 
 ## Commit Convention
 

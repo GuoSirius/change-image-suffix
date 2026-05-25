@@ -88,9 +88,9 @@ function installContextMenu(): void {
 
   // ── 使用 ExtendedSubCommandsKey，直接调用 node.exe（无 bat 中转）──
   const menuBases = [
-    { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p %V' },
-    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', arg: '-p %1' },
-    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', arg: '-f %1' },
+    { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
+    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', arg: '-p "%1"' },
+    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', arg: '-f "%1"' },
   ];
 
   // 1. 注册格式子菜单
@@ -154,10 +154,10 @@ function uninstallContextMenu(): void {
     } catch { /* ignore */ }
   }
 
-  // 删除批处理文件、图标和版本标记
+  // 删除遗留文件（旧版 bat 脚本、图标、版本标记）
   const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming', 'change-image-suffix');
   const batPath = path.join(appDataDir, 'cis_file.bat');
-  try { fs.unlinkSync(batPath); } catch { /* ignore */ }
+  try { fs.unlinkSync(batPath); } catch { /* ignore */ } // 旧版残留清理
   const iconPath = path.join(appDataDir, 'icon.ico');
   try { fs.unlinkSync(iconPath); } catch { /* ignore */ }
   const versionFile = path.join(appDataDir, 'version.json');
@@ -201,21 +201,15 @@ function autoUpdateContextMenu(): void {
 
 // Windows ExtendedSubCommandsKey 会将含空格的路径拆成多段参数，
 // 此函数尝试将拆散的片段拼接回完整路径。
-function resolveSplitPath(parts: string[]): string {
-  if (parts.length === 1) return path.resolve(parts[0]);
+function resolveSplitPath(parts: string[]): string[] {
+  if (parts.length === 1) return [path.resolve(parts[0])];
 
-  // 如果首段已存在，说明不是拆分导致的多段（用户主动传了多个路径）
-  if (fs.existsSync(parts[0])) return path.resolve(parts[0]);
+  // 尝试将拆散的片段用空格拼接回完整路径（右键菜单可能将含空格的路径拆成多段）
+  const fullJoin = parts.join(' ');
+  if (fs.existsSync(fullJoin)) return [path.resolve(fullJoin)];
 
-  // 逐段拼接，直到找到存在的路径
-  let joined = parts[0];
-  for (let j = 1; j < parts.length; j++) {
-    joined += ' ' + parts[j];
-    if (fs.existsSync(joined)) return path.resolve(joined);
-  }
-
-  // 都不存在，返回全拼接结果（后续流程会报 "不存在"）
-  return path.resolve(joined);
+  // 无法拼接为单个存在的路径 → 各段视为独立路径（用户主动传了多个路径）
+  return parts.map(p => path.resolve(p));
 }
 
 function parseArgs(): CliOptions {
@@ -305,7 +299,7 @@ function parseArgs(): CliOptions {
       if (parts.length === 0) {
         dirsFromFlag.push(path.resolve('.'));
       } else {
-        dirsFromFlag.push(resolveSplitPath(parts));
+        dirsFromFlag.push(...resolveSplitPath(parts));
       }
       i++;
       continue;
@@ -322,7 +316,7 @@ function parseArgs(): CliOptions {
         console.error('❌ -f/--file 需要指定至少一个文件路径');
         process.exit(1);
       }
-      filesFromFlag.push(resolveSplitPath(parts));
+      filesFromFlag.push(...resolveSplitPath(parts));
       i++;
       continue;
     }
