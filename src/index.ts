@@ -140,39 +140,44 @@ endlocal
     { verb: 'tiff', label: '📋 TIFF' },
   ];
 
-  // ── 使用 inline shell 子菜单（比 ExtendedSubCommandsKey 更可靠地传递参数）──
+  // ── 使用 ExtendedSubCommandsKey 方式 ──
+  // 文件右键和目录右键均使用 bat 脚本，混合选择时自动分类文件和目录
   const menuBases = [
-    {
-      base: 'HKCU\\Software\\Classes\\*\\shell\\cis',
-      cmd: (fmt: string) => `"${batPath}" ${fmt} "%1"`,
-      multiSelect: true,
-    },
-    {
-      base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis',
-      cmd: (fmt: string) => `"${batPath}" ${fmt} "%1"`,
-      multiSelect: false,
-    },
-    {
-      base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis',
-      cmd: (fmt: string) => `"${cisCmd}" -t ${fmt} -p "%V"`,
-      multiSelect: false,
-    },
+    { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
+    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', useBat: true },
+    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', useBat: true },
   ];
 
+  // 1. 注册公共子菜单（每种菜单类型独立注册）
+  const REG_ROOT = 'HKCU\\Software\\Classes\\';
   for (const menu of menuBases) {
-    // 注册主菜单项
+    for (const fmt of formats) {
+      const shellKey = `${REG_ROOT}${menu.subMenu}\\shell\\${fmt.verb}`;
+      let cmd: string;
+      if ((menu as any).useBat) {
+        // bat 脚本接收格式参数，%1 为 Windows 传入的文件/目录路径
+        cmd = `"${batPath}" ${fmt.verb} "%1"`;
+      } else {
+        cmd = `"${cisCmd}" -t ${fmt.verb} ${menu.arg}`;
+      }
+      execSync(`reg add "${shellKey}" /ve /d "${fmt.label}" /f`, { stdio: 'ignore' });
+      execSync(`reg add "${shellKey}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
+      execSync(`reg add "${shellKey}\\command" /ve /d "${cmd}" /f`, { stdio: 'ignore' });
+    }
+  }
+
+  // 2. 注册主菜单项（使用 ExtendedSubCommandsKey 关联各自的子菜单）
+  for (const menu of menuBases) {
     execSync(`reg add "${menu.base}" /ve /d "🖼 转换图片 (cis)" /f`, { stdio: 'ignore' });
     execSync(`reg add "${menu.base}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
-    if (menu.multiSelect) {
-      execSync(`reg add "${menu.base}" /v MultiSelectModel /d Player /f`, { stdio: 'ignore' });
-    }
+    execSync(`reg add "${menu.base}" /v ExtendedSubCommandsKey /d "${menu.subMenu}" /f`, { stdio: 'ignore' });
 
-    // 注册格式子菜单（inline shell 子键，确保参数正确传递）
-    for (const fmt of formats) {
-      const subKey = `${menu.base}\\shell\\${fmt.verb}`;
-      execSync(`reg add "${subKey}" /ve /d "${fmt.label}" /f`, { stdio: 'ignore' });
-      execSync(`reg add "${subKey}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
-      execSync(`reg add "${subKey}\\command" /ve /d "${menu.cmd(fmt.verb)}" /f`, { stdio: 'ignore' });
+    // 使用 bat 的菜单（文件右键和目录右键）：设置 command 接收文件路径 %1
+    // Windows 会将父命令收到的 %1 自动传递给子命令
+    if ((menu as any).useBat) {
+      execSync(`reg add "${menu.base}\\command" /ve /d "cmd /c echo %1 > nul" /f`, { stdio: 'ignore' });
+      // 注意：不添加 AppliesTo 限制，让菜单始终显示
+      // bat 脚本会检查文件扩展名，自动忽略非图片文件
     }
   }
 
@@ -202,6 +207,19 @@ function uninstallContextMenu(): void {
   for (const key of mainKeys) {
     try {
       execSync(`reg delete "${key}" /f`, { stdio: 'ignore' });
+    } catch { /* ignore */ }
+  }
+
+  // 删除公共子菜单（三个：目录空白、目录图标、文件）
+  const subMenuRoots = [
+    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis',
+    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_dir',
+    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_file',
+  ];
+
+  for (const root of subMenuRoots) {
+    try {
+      execSync(`reg delete "${root}" /f`, { stdio: 'ignore' });
     } catch { /* ignore */ }
   }
 
