@@ -75,24 +75,19 @@ function installContextMenu(): void {
 
   const batPath = path.join(appDataDir, 'cis_file.bat');
 
-  // ── bat 脚本：接收格式 + 文件/目录路径，直接调用 cis ──
+  // ── bat 脚本：逐项调用 cis，不做 if exist/set 路径操作，避免 cmd.exe 对 () & 等字符解析出错 ──
   // %1 = 格式, %2 %3 ... = Windows 传入的文件/目录路径
   const batContent = `
 @echo off
 chcp 65001 >nul
-setlocal enabledelayedexpansion
+setlocal
 
-REM Find cis command in PATH
+REM Find cis command in PATH (take first match via goto)
 set "CIS_CMD="
-for /f "delims=" %%c in ('where cis.cmd 2^>nul') do (
-    if "!CIS_CMD!"=="" set "CIS_CMD=%%c"
-)
-if "!CIS_CMD!"=="" (
-    for /f "delims=" %%c in ('where cis 2^>nul') do (
-        if "!CIS_CMD!"=="" set "CIS_CMD=%%c"
-    )
-)
-if "!CIS_CMD!"=="" (
+for /f "delims=" %%c in ('where cis.cmd 2^>nul') do set "CIS_CMD=%%c" & goto :cis_found
+:cis_found
+if "%CIS_CMD%"=="" for /f "delims=" %%c in ('where cis 2^>nul') do set "CIS_CMD=%%c" & goto :cis_found
+if "%CIS_CMD%"=="" (
     echo [change-image-suffix] cis command not found. Run: npm install -g change-image-suffix
     pause
     exit /b 1
@@ -107,36 +102,22 @@ if "%~1"=="" (
 set "format=%~1"
 shift
 
-set args=
-:parse
-if "%~1"=="" goto :run
-if exist "%~1\\*" goto :is_dir
-goto :is_file
+if "%~1"=="" (
+    echo [change-image-suffix] No files or directories to process.
+    pause
+    exit /b 1
+)
 
-:is_dir
-set args=!args! -p "%~1"
-goto :next_arg
-
-:is_file
-set args=!args! -f "%~1"
-
-:next_arg
+:process
+if "%~1"=="" goto :done
+"%CIS_CMD%" -t %format% "%~1"
 shift
-goto :parse
+goto :process
 
-:run
-if "!args!"=="" goto :no_args
-
-"!CIS_CMD!" -t !format! !args!
+:done
 pause
 endlocal
 goto :eof
-
-:no_args
-echo [change-image-suffix] No files or directories to process.
-pause
-endlocal
-exit /b 1
 `;
   fs.writeFileSync(batPath, batContent, 'utf8');
 
