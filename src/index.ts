@@ -110,24 +110,33 @@ shift
 set args=
 :parse
 if "%~1"=="" goto :run
-if exist "%~1\\*" (
-    set args=!args! -p "%~1"
-) else (
-    set args=!args! -f "%~1"
-)
+if exist "%~1\\*" goto :is_dir
+goto :is_file
+
+:is_dir
+set args=!args! -p "%~1"
+goto :next_arg
+
+:is_file
+set args=!args! -f "%~1"
+
+:next_arg
 shift
 goto :parse
 
 :run
-if "!args!"=="" (
-    echo [change-image-suffix] No files or directories to process.
-    pause
-    exit /b 1
-)
+if "!args!"=="" goto :no_args
 
 "!CIS_CMD!" -t !format! !args!
 pause
 endlocal
+goto :eof
+
+:no_args
+echo [change-image-suffix] No files or directories to process.
+pause
+endlocal
+exit /b 1
 `;
   fs.writeFileSync(batPath, batContent, 'utf8');
 
