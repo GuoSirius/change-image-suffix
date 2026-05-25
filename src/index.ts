@@ -93,17 +93,26 @@ function installContextMenu(): void {
     { base: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_afo', arg: '"%1"', multiSelect: true },
   ];
 
-  // 1. 注册格式子菜单
-  const REG_ROOT = 'HKCU\\Software\\Classes\\';
+  // 1. 用 .reg 文件写子菜单（避免 cmd.exe 引号嵌套解析出错）
+  const regLines: string[] = ['Windows Registry Editor Version 5.00', ''];
   for (const menu of menuBases) {
     for (const fmt of formats) {
-      const shellKey = `${REG_ROOT}${menu.subMenu}\\shell\\${fmt.verb}`;
+      // .reg 语法：值内 \" → 引号，\\ → 反斜杠，%1/%V 保持原样
       const cmd = `"${nodeExe}" "${scriptPath}" --pause -t ${fmt.verb} ${menu.arg}`;
-      execSync(`reg add "${shellKey}" /ve /d "${fmt.label}" /f`, { stdio: 'ignore' });
-      execSync(`reg add "${shellKey}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
-      execSync(`reg add "${shellKey}\\command" /ve /d "${cmd}" /f`, { stdio: 'ignore' });
+      const cmdEscaped = cmd.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const key = `HKEY_CURRENT_USER\\Software\\Classes\\${menu.subMenu}\\shell\\${fmt.verb}`;
+      regLines.push(`[${key}]`);
+      regLines.push(`@="${fmt.label}"`);
+      regLines.push(`"Icon"="${iconPath.replace(/\\/g, '\\\\')}"`);
+      regLines.push(`[${key}\\command]`);
+      regLines.push(`@="${cmdEscaped}"`);
+      regLines.push('');
     }
   }
+  const regFile = path.join(appDataDir, 'cis_menu.reg');
+  fs.writeFileSync(regFile, regLines.join('\r\n'), 'utf8');
+  execSync(`reg import "${regFile}"`, { stdio: 'ignore' });
+  try { fs.unlinkSync(regFile); } catch { /* ignore */ }
 
   // 2. 注册主菜单项
   for (const menu of menuBases) {
