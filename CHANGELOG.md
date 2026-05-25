@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.15](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.14...v2.1.15) (2026-05-25)
+
+
+### Bug Fixes
+
+* use AllFilesystemObjects to support mixed file+directory selection ([5a67d8f](https://github.com/GuoSirius/change-image-suffix/commit/5a67d8f3a436f24b1b9cff2c173d5aeea661f907))
+
+
+### Documentation
+
+* update CLAUDE.md for AllFilesystemObjects architecture ([5957326](https://github.com/GuoSirius/change-image-suffix/commit/59573263dfb01c9d27239d06878068d63de96229))
+
 ### [2.1.14](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.13...v2.1.14) (2026-05-25)
 
 
