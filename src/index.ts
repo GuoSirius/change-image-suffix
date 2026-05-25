@@ -199,6 +199,25 @@ function autoUpdateContextMenu(): void {
 // 参数解析
 // ─────────────────────────────────────────
 
+// Windows ExtendedSubCommandsKey 会将含空格的路径拆成多段参数，
+// 此函数尝试将拆散的片段拼接回完整路径。
+function resolveSplitPath(parts: string[]): string {
+  if (parts.length === 1) return path.resolve(parts[0]);
+
+  // 如果首段已存在，说明不是拆分导致的多段（用户主动传了多个路径）
+  if (fs.existsSync(parts[0])) return path.resolve(parts[0]);
+
+  // 逐段拼接，直到找到存在的路径
+  let joined = parts[0];
+  for (let j = 1; j < parts.length; j++) {
+    joined += ' ' + parts[j];
+    if (fs.existsSync(joined)) return path.resolve(joined);
+  }
+
+  // 都不存在，返回全拼接结果（后续流程会报 "不存在"）
+  return path.resolve(joined);
+}
+
 function parseArgs(): CliOptions {
   const args = process.argv.slice(2);
 
@@ -276,31 +295,34 @@ function parseArgs(): CliOptions {
     }
 
     if (arg === '-p' || arg === '--path') {
-      // 收集 -p 后的目录
+      // 收集 -p 后的目录（Windows 右键菜单可能将含空格的路径拆成多段，需尝试拼接）
+      const parts: string[] = [];
       const start = i + 1;
       while (i + 1 < args.length && !args[i + 1].startsWith('-')) {
         i++;
-        dirsFromFlag.push(path.resolve(args[i]));
+        parts.push(args[i]);
       }
-      // 如果 -p 后面没有参数，用当前目录
-      if (start > i) {
+      if (parts.length === 0) {
         dirsFromFlag.push(path.resolve('.'));
+      } else {
+        dirsFromFlag.push(resolveSplitPath(parts));
       }
       i++;
       continue;
     }
 
     if (arg === '-f' || arg === '--file') {
-      // 收集 -f 后的所有文件
+      const parts: string[] = [];
       const start = i + 1;
       while (i + 1 < args.length && !args[i + 1].startsWith('-')) {
         i++;
-        filesFromFlag.push(path.resolve(args[i]));
+        parts.push(args[i]);
       }
-      if (start > i) {
+      if (parts.length === 0) {
         console.error('❌ -f/--file 需要指定至少一个文件路径');
         process.exit(1);
       }
+      filesFromFlag.push(resolveSplitPath(parts));
       i++;
       continue;
     }
