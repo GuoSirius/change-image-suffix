@@ -87,10 +87,10 @@ function installContextMenu(): void {
   ];
 
   // ── 使用 ExtendedSubCommandsKey，直接调用 node.exe（无 bat 中转）──
+  // AllFilesystemObjects 覆盖文件和目录，支持混合多选
   const menuBases = [
     { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
-    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', arg: '-p "%1"' },
-    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', arg: '-f "%1"' },
+    { base: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_afo', arg: '%*', multiSelect: true },
   ];
 
   // 1. 注册格式子菜单
@@ -110,6 +110,9 @@ function installContextMenu(): void {
     execSync(`reg add "${menu.base}" /ve /d "🖼 转换图片 (cis)" /f`, { stdio: 'ignore' });
     execSync(`reg add "${menu.base}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
     execSync(`reg add "${menu.base}" /v ExtendedSubCommandsKey /d "${menu.subMenu}" /f`, { stdio: 'ignore' });
+    if ((menu as any).multiSelect) {
+      execSync(`reg add "${menu.base}" /v MultiSelectModel /d Player /f`, { stdio: 'ignore' });
+    }
   }
 
   // 写入版本标记，用于检测 npm update 后自动刷新菜单
@@ -128,11 +131,12 @@ function installContextMenu(): void {
 function uninstallContextMenu(): void {
   requireWindows();
 
-  // 删除主菜单项
+  // 删除主菜单项（含旧版残留）
   const mainKeys = [
     'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis',
-    'HKCU\\Software\\Classes\\Directory\\shell\\cis',
-    'HKCU\\Software\\Classes\\*\\shell\\cis',
+    'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell\\cis',
+    'HKCU\\Software\\Classes\\Directory\\shell\\cis',    // 旧版残留
+    'HKCU\\Software\\Classes\\*\\shell\\cis',           // 旧版残留
   ];
 
   for (const key of mainKeys) {
@@ -141,11 +145,12 @@ function uninstallContextMenu(): void {
     } catch { /* ignore */ }
   }
 
-  // 删除公共子菜单（三个：目录空白、目录图标、文件）
+  // 删除公共子菜单
   const subMenuRoots = [
     'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis',
-    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_dir',
-    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_file',
+    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_dir',   // 旧版残留
+    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_file', // 旧版残留
+    'HKCU\\Software\\Classes\\Directory\\ContextMenus\\cis_afo',
   ];
 
   for (const root of subMenuRoots) {
