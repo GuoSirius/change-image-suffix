@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.14](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.13...v2.1.14) (2026-05-25)
+
+
+### Bug Fixes
+
+* add quotes around %V/%1 in context menu, make resolveSplitPath return string[] ([28ccc83](https://github.com/GuoSirius/change-image-suffix/commit/28ccc83d39f4441eac31a8985509ac49a8ab7019))
+
 ### [2.1.13](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.12...v2.1.13) (2026-05-25)
 
 
