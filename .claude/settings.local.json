@@ -10,7 +10,9 @@
       "Bash(npx tsc *)",
       "Bash(rm -rf assets/webp)",
       "Bash(ls node_modules/.bin/tsc)",
-      "Bash(./node_modules/.bin/tsc)"
+      "Bash(./node_modules/.bin/tsc)",
+      "Bash(git checkout *)",
+      "Bash(grep -n \"return;\\\\|^  }$\" src/index.ts)"
     ]
   }
 }
