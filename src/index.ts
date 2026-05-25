@@ -73,53 +73,9 @@ function installContextMenu(): void {
   }
   const iconPath = fs.existsSync(icoTarget) ? icoTarget : cisCmd;
 
-  const batPath = path.join(appDataDir, 'cis_file.bat');
-
-  // ── bat 脚本：逐项调用 cis，不做 if exist/set 路径操作，避免 cmd.exe 对 () & 等字符解析出错 ──
-  // %1 = 格式, %2 %3 ... = Windows 传入的文件/目录路径
-  const batContent = `
-@echo off
-chcp 65001 >nul
-setlocal
-
-REM Find cis command in PATH (take first match via goto)
-set "CIS_CMD="
-for /f "delims=" %%c in ('where cis.cmd 2^>nul') do set "CIS_CMD=%%c" & goto :cis_found
-:cis_found
-if "%CIS_CMD%"=="" for /f "delims=" %%c in ('where cis 2^>nul') do set "CIS_CMD=%%c" & goto :cis_found
-if "%CIS_CMD%"=="" (
-    echo [change-image-suffix] cis command not found. Run: npm install -g change-image-suffix
-    pause
-    exit /b 1
-)
-
-if "%~1"=="" (
-    echo [change-image-suffix] Error: No format specified.
-    pause
-    exit /b 1
-)
-
-set "format=%~1"
-shift
-
-if "%~1"=="" (
-    echo [change-image-suffix] No files or directories to process.
-    pause
-    exit /b 1
-)
-
-:process
-if "%~1"=="" goto :done
-"%CIS_CMD%" -t %format% "%~1"
-shift
-goto :process
-
-:done
-pause
-endlocal
-goto :eof
-`;
-  fs.writeFileSync(batPath, batContent, 'utf8');
+  // 绕过 cmd.exe 编码问题：直接用 node.exe 调用，避免 bat/cmd 的 GBK/Unicode 转换
+  const nodeExe = process.execPath;
+  const scriptPath = path.join(__dirname, 'index.js');
 
   // ── 格式列表（webp 排第一，其他按常见程度排序）──
   const formats = [
@@ -130,45 +86,30 @@ goto :eof
     { verb: 'tiff', label: '📋 TIFF' },
   ];
 
-  // ── 使用 ExtendedSubCommandsKey 方式 ──
-  // 文件右键和目录右键均使用 bat 脚本，混合选择时自动分类文件和目录
+  // ── 使用 ExtendedSubCommandsKey，直接调用 node.exe（无 bat 中转）──
   const menuBases = [
     { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
-    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', useBat: true },
-    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', useBat: true },
+    { base: 'HKCU\\Software\\Classes\\Directory\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_dir', arg: '-p "%1"' },
+    { base: 'HKCU\\Software\\Classes\\*\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_file', arg: '-f "%1"' },
   ];
 
-  // 1. 注册公共子菜单（每种菜单类型独立注册）
+  // 1. 注册格式子菜单
   const REG_ROOT = 'HKCU\\Software\\Classes\\';
   for (const menu of menuBases) {
     for (const fmt of formats) {
       const shellKey = `${REG_ROOT}${menu.subMenu}\\shell\\${fmt.verb}`;
-      let cmd: string;
-      if ((menu as any).useBat) {
-        // bat 脚本接收格式参数，%1 为 Windows 传入的文件/目录路径
-        cmd = `"${batPath}" ${fmt.verb} "%1"`;
-      } else {
-        cmd = `"${cisCmd}" -t ${fmt.verb} ${menu.arg}`;
-      }
+      const cmd = `"${nodeExe}" "${scriptPath}" --pause -t ${fmt.verb} ${menu.arg}`;
       execSync(`reg add "${shellKey}" /ve /d "${fmt.label}" /f`, { stdio: 'ignore' });
       execSync(`reg add "${shellKey}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
       execSync(`reg add "${shellKey}\\command" /ve /d "${cmd}" /f`, { stdio: 'ignore' });
     }
   }
 
-  // 2. 注册主菜单项（使用 ExtendedSubCommandsKey 关联各自的子菜单）
+  // 2. 注册主菜单项
   for (const menu of menuBases) {
     execSync(`reg add "${menu.base}" /ve /d "🖼 转换图片 (cis)" /f`, { stdio: 'ignore' });
     execSync(`reg add "${menu.base}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
     execSync(`reg add "${menu.base}" /v ExtendedSubCommandsKey /d "${menu.subMenu}" /f`, { stdio: 'ignore' });
-
-    // 使用 bat 的菜单（文件右键和目录右键）：设置 command 接收文件路径 %1
-    // Windows 会将父命令收到的 %1 自动传递给子命令
-    if ((menu as any).useBat) {
-      execSync(`reg add "${menu.base}\\command" /ve /d "cmd /c echo %1 > nul" /f`, { stdio: 'ignore' });
-      // 注意：不添加 AppliesTo 限制，让菜单始终显示
-      // bat 脚本会检查文件扩展名，自动忽略非图片文件
-    }
   }
 
   // 写入版本标记，用于检测 npm update 后自动刷新菜单
@@ -732,72 +673,77 @@ async function main(): Promise<void> {
     const dirResult = await processDirs(options.multiPaths);
     console.log('\n----------------------------------------');
     console.log(`📊 转换完成！成功: ${fileResult.success + dirResult.success}, 失败: ${fileResult.fail + dirResult.fail}\n`);
-    return;
-  }
-
-  // ─── 单/多文件模式 ───
-  if (options.multiFiles && options.multiFiles.length > 0) {
+  } else if (options.multiFiles && options.multiFiles.length > 0) {
+    // ─── 单/多文件模式 ───
     const result = await processFiles(options.multiFiles, '图片转换工具');
     console.log('\n----------------------------------------\n');
     console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
-    return;
-  }
-
-  // ─── 多路径模式 ───
-  if (options.multiPaths) {
+  } else if (options.multiPaths) {
+    // ─── 多路径模式 ───
     console.log(`\n🖼️  change-image-suffix - 批量转换工具\n`);
     const result = await processDirs(options.multiPaths);
     console.log('\n----------------------------------------');
     console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
-    return;
-  }
+  } else {
+    // ─── 目录批量模式 ───
+    console.log(`📂 目录: ${options.directory}`);
+    console.log(`🔁 递归: ${options.recursive ? `是 (深度: ${options.maxDepth === Infinity ? '无限制' : options.maxDepth})` : '否'}`);
+    console.log(`📄 后缀: ${options.extensions.join(', ')}`);
+    console.log(`🎯 目标格式: ${options.targetFormat}`);
+    console.log('\n----------------------------------------\n');
 
-  // ─── 目录批量模式 ───
-  console.log(`📂 目录: ${options.directory}`);
-  console.log(`🔁 递归: ${options.recursive ? `是 (深度: ${options.maxDepth === Infinity ? '无限制' : options.maxDepth})` : '否'}`);
-  console.log(`📄 后缀: ${options.extensions.join(', ')}`);
-  console.log(`🎯 目标格式: ${options.targetFormat}`);
-  console.log('\n----------------------------------------\n');
+    const files = getAllFiles(options.directory, options.extensions, options.recursive, 0, options.maxDepth, options.targetFormat);
 
-  const files = getAllFiles(options.directory, options.extensions, options.recursive, 0, options.maxDepth, options.targetFormat);
-
-  if (files.length === 0) {
-    console.log('✅ 没有找到需要转换的图片文件。');
-    return;
-  }
-
-  console.log(`📋 找到 ${files.length} 个文件，准备开始转换...\n`);
-
-  let successCount = 0;
-  let failCount = 0;
-  const results: { input: string; output: string; status: 'success' | 'fail' }[] = [];
-
-  for (const file of files) {
-    const relativePath = path.relative(options.directory, file);
-    process.stdout.write(`  处理中: ${relativePath} ... `);
-
-    const result = await convertImage(file, options.targetFormat, files);
-
-    if (result.success) {
-      const outputRelativePath = path.relative(options.directory, result.outputPath);
-      console.log(`✅ -> ${outputRelativePath}`);
-      results.push({ input: file, output: result.outputPath, status: 'success' });
-      successCount++;
+    if (files.length === 0) {
+      console.log('✅ 没有找到需要转换的图片文件。');
     } else {
-      console.log(`❌ 失败 (${result.error})`);
-      results.push({ input: file, output: '', status: 'fail' });
-      failCount++;
+      console.log(`📋 找到 ${files.length} 个文件，准备开始转换...\n`);
+
+      let successCount = 0;
+      let failCount = 0;
+      const results: { input: string; output: string; status: 'success' | 'fail' }[] = [];
+
+      for (const file of files) {
+        const relativePath = path.relative(options.directory, file);
+        process.stdout.write(`  处理中: ${relativePath} ... `);
+
+        const result = await convertImage(file, options.targetFormat, files);
+
+        if (result.success) {
+          const outputRelativePath = path.relative(options.directory, result.outputPath);
+          console.log(`✅ -> ${outputRelativePath}`);
+          results.push({ input: file, output: result.outputPath, status: 'success' });
+          successCount++;
+        } else {
+          console.log(`❌ 失败 (${result.error})`);
+          results.push({ input: file, output: '', status: 'fail' });
+          failCount++;
+        }
+      }
+
+      console.log('\n----------------------------------------');
+      console.log(`\n📊 转换完成！成功: ${successCount}, 失败: ${failCount}\n`);
+
+      if (failCount > 0) {
+        console.log('❌ 失败的文件:');
+        for (const r of results.filter(x => x.status === 'fail')) {
+          console.log(`   - ${r.input}`);
+        }
+      }
     }
   }
 
-  console.log('\n----------------------------------------');
-  console.log(`\n📊 转换完成！成功: ${successCount}, 失败: ${failCount}\n`);
-
-  if (failCount > 0) {
-    console.log('❌ 失败的文件:');
-    for (const r of results.filter(x => x.status === 'fail')) {
-      console.log(`   - ${r.input}`);
-    }
+  // 右键菜单调用时暂停，让用户看到输出
+  if (process.argv.includes('--pause')) {
+    console.log('\n按任意键退出...');
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    await new Promise<void>(resolve => {
+      process.stdin.once('data', () => {
+        process.stdin.setRawMode(false);
+        resolve();
+      });
+    });
   }
 }
 
