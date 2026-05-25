@@ -90,7 +90,7 @@ function installContextMenu(): void {
   // AllFilesystemObjects 覆盖文件和目录，支持混合多选
   const menuBases = [
     { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
-    { base: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_afo', arg: '%*', multiSelect: true },
+    { base: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_afo', arg: '"%1"', multiSelect: true },
   ];
 
   // 1. 用 .reg 文件写子菜单（避免 cmd.exe 引号嵌套解析出错）
