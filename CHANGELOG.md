@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.11](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.10...v2.1.11) (2026-05-25)
+
+
+### Bug Fixes
+
+* bypass cmd.exe entirely — call node.exe directly from context menu ([ced93c4](https://github.com/GuoSirius/change-image-suffix/commit/ced93c498bc83ed68da59b539553d5b04c0ec1eb))
+
+
+### Chores
+
+* update local settings permissions ([f97f6f6](https://github.com/GuoSirius/change-image-suffix/commit/f97f6f6a229fc7401291c4a1175f2184bf5e7ec1))
+
 ### [2.1.10](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.9...v2.1.10) (2026-05-25)
 
 
