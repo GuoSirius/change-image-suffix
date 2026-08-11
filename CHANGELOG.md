@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.2.1](https://github.com/GuoSirius/change-image-suffix/compare/v2.2.0...v2.2.1) (2026-08-11)
+
+
+### Bug Fixes
+
+* **ci:** 修正 GitHub release 说明抽取逻辑 ([b3fbc3f](https://github.com/GuoSirius/change-image-suffix/commit/b3fbc3fc398de17cba2d25a3571b885369482554))
+
+
+### Chores
+
+* **memory:** 记录 GitHub release 说明抽取 bug 修复 ([d43d4c9](https://github.com/GuoSirius/change-image-suffix/commit/d43d4c9a6f1f59af8b1751e953145432b6afc8e8))
+
 ## [2.2.0](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.19...v2.2.0) (2026-08-11)
 
 
