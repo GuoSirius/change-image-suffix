@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.2.4](https://github.com/GuoSirius/change-image-suffix/compare/v2.2.3...v2.2.4) (2026-08-11)
+
+
+### Bug Fixes
+
+* 右键菜单多选只弹一个窗口，非图片/不存在路径改为跳过不计入失败 ([c8bc209](https://github.com/GuoSirius/change-image-suffix/commit/c8bc2095d9cc4ce96772702b0ca821daec2172ba))
+
+
+### Documentation
+
+* 记录右键菜单多选聚合与非图片跳过修复 ([a0c24b6](https://github.com/GuoSirius/change-image-suffix/commit/a0c24b651dd551bbe35f7608bbf921c0c06864b4))
+
 ### [2.2.3](https://github.com/GuoSirius/change-image-suffix/compare/v2.2.2...v2.2.3) (2026-08-11)
 
 
