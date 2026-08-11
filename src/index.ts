@@ -1124,10 +1124,11 @@ async function coordinateContextMenu(myTask: MenuTask): Promise<{ coordinator: b
 // ─────────────────────────────────────────
 
 async function main(): Promise<void> {
-  // 裁剪子命令：剥离 'crop' 以免被当作文件/目录位置参数
+  // 裁剪子命令：剥离 'crop'（可能出现在 --pause 等全局参数之后，如右键菜单 `cis --pause crop ...`）
   let mode: 'convert' | 'crop' = 'convert';
-  if (process.argv[2] === 'crop') {
-    process.argv.splice(2, 1);
+  const cropIdx = process.argv.findIndex((a, i) => i >= 2 && a === 'crop');
+  if (cropIdx !== -1) {
+    process.argv.splice(cropIdx, 1);
     mode = 'crop';
   }
 
