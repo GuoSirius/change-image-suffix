@@ -22,6 +22,11 @@ interface CliOptions {
   maxDepth: number;
   extensions: string[];
   targetFormat: string;
+  mode: 'convert' | 'crop';      // 操作模式：转换 / 空白裁剪
+  cropPadding: number;           // 裁剪后四周留白像素（默认 0）
+  cropBg?: [number, number, number]; // 自定义背景色 RGB（用于裁剪接近该色的区域）
+  cropBgTolerance: number;       // 背景色容差（每个通道差值上限，默认 10）
+  cropWhiteTolerance: number;    // 白底容差（rgb 低于 255 的上限，默认 8）
   multiFiles?: string[];  // 多文件模式（多选文件）
   multiPaths?: string[];   // 多路径模式（多选文件/目录混合）
 }
@@ -77,8 +82,9 @@ function installContextMenu(): void {
   const nodeExe = process.execPath;
   const scriptPath = path.join(__dirname, 'index.js');
 
-  // ── 格式列表（webp 排第一，其他按常见程度排序）──
+  // ── 格式列表（webp 排第一，其他按常见程度排序；crop 为空白裁剪）──
   const formats = [
+    { verb: 'crop', label: '📐 裁剪空白' },
     { verb: 'webp', label: 'WebP' },
     { verb: 'jpg', label: 'JPG' },
     { verb: 'png', label: 'PNG' },
@@ -98,7 +104,10 @@ function installContextMenu(): void {
   for (const menu of menuBases) {
     for (const fmt of formats) {
       // .reg 语法：值内 \" → 引号，\\ → 反斜杠，%1/%V 保持原样
-      const cmd = `"${nodeExe}" "${scriptPath}" --pause -t ${fmt.verb} ${menu.arg}`;
+      // crop 是子命令而非目标格式，命令结构不同
+      const cmd = fmt.verb === 'crop'
+        ? `"${nodeExe}" "${scriptPath}" --pause crop ${menu.arg}`
+        : `"${nodeExe}" "${scriptPath}" --pause -t ${fmt.verb} ${menu.arg}`;
       const cmdEscaped = cmd.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const key = `HKEY_CURRENT_USER\\Software\\Classes\\${menu.subMenu}\\shell\\${fmt.verb}`;
       regLines.push(`[${key}]`);
@@ -130,10 +139,11 @@ function installContextMenu(): void {
   fs.writeFileSync(versionFile, JSON.stringify({ version: pkg.version }), 'utf8');
 
   console.log('✅ 右键菜单安装成功！');
-  console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式子菜单');
-  console.log('   🖼  图片文件上右键       → 悬停展开格式子菜单');
+  console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式/裁剪子菜单');
+  console.log('   🖼  图片文件上右键       → 悬停展开格式/裁剪子菜单');
   console.log('   ⚠️  非图片文件右键       → 菜单显示但不处理');
-  console.log(`   📂 输出目录: <原目录>/<目标格式>/`);
+  console.log(`   📂 转换输出: <原目录>/<目标格式>/`);
+  console.log(`   ✂️  裁剪输出: <原目录>/cropped/`);
   console.log('\n💡 提示：如需卸载，执行 cis uninstall-menu');
 }
 
@@ -235,6 +245,10 @@ function parseArgs(): CliOptions {
     maxDepth: Infinity,
     extensions: [...DEFAULT_EXTENSIONS],
     targetFormat: DEFAULT_TARGET_FORMAT,
+    mode: 'convert',
+    cropPadding: 0,
+    cropBgTolerance: 10,
+    cropWhiteTolerance: 8,
   };
 
   // 用于分类收集的临时数组
@@ -274,6 +288,72 @@ function parseArgs(): CliOptions {
         options.extensions = args[++i].split(',').map(e => e.trim().toLowerCase().replace(/^\./, ''));
       } else {
         console.error('❌ -e/--extensions 需要指定后缀参数');
+        process.exit(1);
+      }
+      i++;
+      continue;
+    }
+
+    // ─── 裁剪相关参数（仅 crop 模式生效，convert 模式忽略）───
+
+    if (arg === '-b' || arg === '--bg') {
+      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        const parts = args[++i].split(',').map(s => parseInt(s.trim(), 10));
+        if (parts.length !== 3 || parts.some(n => isNaN(n) || n < 0 || n > 255)) {
+          console.error('❌ --bg 需要 3 个 0-255 的 RGB 值，逗号分隔，如 --bg 255,255,255');
+          process.exit(1);
+        }
+        options.cropBg = parts as [number, number, number];
+      } else {
+        console.error('❌ --bg 需要指定 RGB 参数');
+        process.exit(1);
+      }
+      i++;
+      continue;
+    }
+
+    if (arg === '--padding') {
+      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        const val = parseInt(args[++i], 10);
+        if (isNaN(val) || val < 0) {
+          console.error('❌ --padding 必须是非负整数');
+          process.exit(1);
+        }
+        options.cropPadding = val;
+      } else {
+        console.error('❌ --padding 需要指定像素值');
+        process.exit(1);
+      }
+      i++;
+      continue;
+    }
+
+    if (arg === '--tolerance') {
+      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        const val = parseInt(args[++i], 10);
+        if (isNaN(val) || val < 0) {
+          console.error('❌ --tolerance 必须是非负整数');
+          process.exit(1);
+        }
+        options.cropBgTolerance = val;
+      } else {
+        console.error('❌ --tolerance 需要指定容差值');
+        process.exit(1);
+      }
+      i++;
+      continue;
+    }
+
+    if (arg === '--white-tolerance') {
+      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        const val = parseInt(args[++i], 10);
+        if (isNaN(val) || val < 0) {
+          console.error('❌ --white-tolerance 必须是非负整数');
+          process.exit(1);
+        }
+        options.cropWhiteTolerance = val;
+      } else {
+        console.error('❌ --white-tolerance 需要指定容差值');
         process.exit(1);
       }
       i++;
@@ -400,16 +480,25 @@ function printHelp(): void {
 用法:
   change-image-suffix [选项]
   cis [选项]                     # 简写
+  cis crop [选项] [路径]          # 裁剪图片四周空白到 cropped/ 子目录
   cis install-menu               # 添加到 Windows 右键菜单
   cis uninstall-menu             # 从 Windows 右键菜单移除
 
-选项:
+转换选项:
   -f, --file <file>       转换指定文件（可多个，空格分隔）
   -p, --path <dir>        指定工作目录（默认: 当前目录）
   -r, --recursive         递归搜索子目录
   -d, --depth <n>         递归深度限制（需要 -r 选项）
   -e, --extensions <ext>  指定源后缀，逗号分隔（不含点号）
   -t, --to <format>       目标格式: webp, jpg/jpeg, png, avif, tiff/tif（默认: webp）
+
+裁剪选项（仅 crop 模式）:
+  -b, --bg <r,g,b>        额外将接近该 RGB 的背景区域也裁掉（默认仅裁透明+纯白）
+  --padding <n>           裁剪后四周保留的留白像素（默认 0，紧贴内容）
+  --tolerance <n>         背景色容差，每个通道差值上限（默认 10）
+  --white-tolerance <n>   白底容差，rgb 低于 255 的上限（默认 8）
+
+通用:
   -h, --help              显示帮助信息
   -v, --version           显示版本信息
 
@@ -420,6 +509,9 @@ function printHelp(): void {
   cis -r                           # 递归转换当前目录
   cis -r -d 2 -p ./images         # 递归转换，深度限制为2
   cis -e png,jpg -t jpg           # png/jpg 转换为 jpg
+  cis crop -f ./big.png           # 裁剪单张图片空白到 cropped/
+  cis crop -p ./images -r         # 递归裁剪目录下所有图片
+  cis crop -f ./a.png --bg 245,245,245 --padding 10  # 自定义背景色+留边
   cis install-menu                 # 注册 Windows 右键菜单
 `);
 }
@@ -554,10 +646,123 @@ async function convertImage(
 }
 
 // ─────────────────────────────────────────
+// 空白裁剪
+// ─────────────────────────────────────────
+
+// 判断一个像素是否应被视为「空白」（可裁掉）
+function isBlankPixel(r: number, g: number, b: number, a: number, opts: CliOptions): boolean {
+  if (a === 0) return true; // 透明像素
+  // 纯白背景（允许少量容差）
+  if (r >= 255 - opts.cropWhiteTolerance && g >= 255 - opts.cropWhiteTolerance && b >= 255 - opts.cropWhiteTolerance) {
+    return true;
+  }
+  // 自定义背景色（每个通道差值在容差内）
+  if (opts.cropBg) {
+    const [br, bg, bb] = opts.cropBg;
+    if (Math.abs(r - br) <= opts.cropBgTolerance &&
+        Math.abs(g - bg) <= opts.cropBgTolerance &&
+        Math.abs(b - bb) <= opts.cropBgTolerance) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function cropImage(
+  inputPath: string,
+  options: CliOptions,
+  _allInputFiles: string[]
+): Promise<{ success: boolean; outputPath: string; error?: string }> {
+  // 裁剪模式输出到 <原目录>/cropped/，文件名保持原样（同格式）
+  const dir = path.dirname(inputPath);
+  const ext = path.extname(inputPath);
+  const basename = path.basename(inputPath, ext);
+  const outputPath = path.join(dir, 'cropped', `${basename}${ext}`);
+  const srcExt = ext.slice(1).toLowerCase();
+
+  if (!SUPPORTED_INPUT_EXTENSIONS.includes(srcExt)) {
+    return { success: false, outputPath, error: `不支持的图片格式: ${srcExt}` };
+  }
+
+  try {
+    const outputDir = path.dirname(outputPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    // ensureAlpha：统一 4 通道，便于判断透明像素（无 alpha 的图片会补为 255）
+    const { data, info } = await sharp(inputPath)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const { width, height, channels } = info;
+
+    // 扫描找出内容（非空白）的包围盒
+    let top = height, bottom = -1, left = width, right = -1;
+    for (let y = 0; y < height; y++) {
+      const rowOffset = y * width * channels;
+      for (let x = 0; x < width; x++) {
+        const idx = rowOffset + x * channels;
+        if (!isBlankPixel(data[idx], data[idx + 1], data[idx + 2], data[idx + 3], options)) {
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+          if (x < left) left = x;
+          if (x > right) right = x;
+        }
+      }
+    }
+
+    if (top > bottom || left > right) {
+      return { success: false, outputPath, error: '整张图片都是空白，无需裁剪' };
+    }
+
+    // 应用四周留白
+    const p = options.cropPadding;
+    const left2 = Math.max(0, left - p);
+    const top2 = Math.max(0, top - p);
+    const right2 = Math.min(width, right + 1 + p);
+    const bottom2 = Math.min(height, bottom + 1 + p);
+    const cropW = right2 - left2;
+    const cropH = bottom2 - top2;
+
+    await sharp(inputPath)
+      .extract({ left: left2, top: top2, width: cropW, height: cropH })
+      .toFile(outputPath);
+
+    return { success: true, outputPath };
+  } catch (err) {
+    return {
+      success: false,
+      outputPath,
+      error: err instanceof Error ? err.message : '未知错误'
+    };
+  }
+}
+
+// 根据模式分发到转换或裁剪
+async function processImage(
+  filePath: string,
+  options: CliOptions,
+  allInputFiles: string[]
+): Promise<{ success: boolean; outputPath: string; error?: string }> {
+  if (options.mode === 'crop') {
+    return cropImage(filePath, options, allInputFiles);
+  }
+  return convertImage(filePath, options.targetFormat, allInputFiles);
+}
+
+// ─────────────────────────────────────────
 // 入口
 // ─────────────────────────────────────────
 
 async function main(): Promise<void> {
+  // 裁剪子命令：剥离 'crop' 以免被当作文件/目录位置参数
+  let mode: 'convert' | 'crop' = 'convert';
+  if (process.argv[2] === 'crop') {
+    process.argv.splice(2, 1);
+    mode = 'crop';
+  }
+
   const firstArg = process.argv[2];
 
   // 子命令：右键菜单管理
@@ -573,14 +778,19 @@ async function main(): Promise<void> {
   // 自动检测版本变化并刷新右键菜单（npm update 不触发 postinstall）
   autoUpdateContextMenu();
 
-  console.log('\n🖼️  change-image-suffix - 图片格式批量转换工具\n');
-
   const options = parseArgs();
+  options.mode = mode;
 
   // ─── 辅助函数：处理文件列表 ───
   async function processFiles(files: string[], title: string): Promise<{ success: number; fail: number }> {
-    console.log(`\n🖼️  change-image-suffix - ${title}\n`);
-    console.log(`🎯 目标格式: ${options.targetFormat}`);
+    const isCrop = options.mode === 'crop';
+    console.log(`\n🖼️  change-image-suffix - ${isCrop ? '空白裁剪工具' : title}\n`);
+    if (isCrop) {
+      console.log(`✂️  模式: 裁剪四周空白 → cropped/`);
+      console.log(`📐 留白: ${options.cropPadding}px` + (options.cropBg ? `，背景色: ${options.cropBg.join(',')}` : '，背景: 透明+纯白'));
+    } else {
+      console.log(`🎯 目标格式: ${options.targetFormat}`);
+    }
     console.log(`📦 待处理: ${files.length} 个文件\n`);
     console.log('----------------------------------------\n');
 
@@ -599,7 +809,7 @@ async function main(): Promise<void> {
 
       console.log(`  📄 文件: ${filePath}`);
       process.stdout.write(`     处理中: ${path.basename(filePath)} ... `);
-      const result = await convertImage(filePath, options.targetFormat, files);
+      const result = await processImage(filePath, options, files);
 
       if (result.success) {
         console.log(`✅ -> ${path.relative(path.dirname(filePath), result.outputPath)}`);
@@ -623,7 +833,13 @@ async function main(): Promise<void> {
 
   // ─── 辅助函数：处理目录列表 ───
   async function processDirs(dirs: string[]): Promise<{ success: number; fail: number }> {
-    console.log(`\n🎯 目标格式: ${options.targetFormat}`);
+    const isCrop = options.mode === 'crop';
+    if (isCrop) {
+      console.log(`\n✂️  change-image-suffix - 空白裁剪工具`);
+      console.log(`📐 留白: ${options.cropPadding}px` + (options.cropBg ? `，背景色: ${options.cropBg.join(',')}` : '，背景: 透明+纯白'));
+    } else {
+      console.log(`\n🎯 目标格式: ${options.targetFormat}`);
+    }
     console.log(`📦 待处理: ${dirs.length} 个目录\n`);
     console.log('----------------------------------------\n');
 
@@ -652,7 +868,7 @@ async function main(): Promise<void> {
 
         console.log(`  📄 文件: ${inputPath}`);
         process.stdout.write(`     处理中: ${path.basename(inputPath)} ... `);
-        const result = await convertImage(inputPath, options.targetFormat, dirs);
+        const result = await processImage(inputPath, options, dirs);
         if (result.success) {
           console.log(`✅ -> ${path.relative(path.dirname(inputPath), result.outputPath)}`);
           totalSuccess++;
@@ -662,7 +878,7 @@ async function main(): Promise<void> {
           failures.push(inputPath);
         }
       } else {
-        const files = getAllFiles(inputPath, options.extensions, options.recursive, 0, options.maxDepth, options.targetFormat);
+        const files = getAllFiles(inputPath, options.extensions, options.recursive, 0, options.maxDepth, options.mode === 'crop' ? 'cropped' : options.targetFormat);
         console.log(`  📁 目录: ${inputPath} (${files.length} 个文件)`);
 
         if (files.length === 0) {
@@ -672,7 +888,7 @@ async function main(): Promise<void> {
 
         for (const file of files) {
           process.stdout.write(`     处理中: ${path.basename(file)} ... `);
-          const result = await convertImage(file, options.targetFormat, files);
+          const result = await processImage(file, options, files);
           if (result.success) {
             console.log(`✅`);
             totalSuccess++;
@@ -714,25 +930,31 @@ async function main(): Promise<void> {
     console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
   } else if (options.multiPaths) {
     // ─── 多路径模式 ───
-    console.log(`\n🖼️  change-image-suffix - 批量转换工具\n`);
+    console.log(`\n🖼️  change-image-suffix - ${options.mode === 'crop' ? '批量裁剪工具' : '批量转换工具'}\n`);
     const result = await processDirs(options.multiPaths);
     totalFail = result.fail;
     console.log('\n----------------------------------------');
     console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
   } else {
     // ─── 目录批量模式 ───
+    const isCrop = options.mode === 'crop';
+    const excludeName = isCrop ? 'cropped' : options.targetFormat;
     console.log(`📂 目录: ${options.directory}`);
     console.log(`🔁 递归: ${options.recursive ? `是 (深度: ${options.maxDepth === Infinity ? '无限制' : options.maxDepth})` : '否'}`);
     console.log(`📄 后缀: ${options.extensions.join(', ')}`);
-    console.log(`🎯 目标格式: ${options.targetFormat}`);
+    if (isCrop) {
+      console.log(`✂️  模式: 裁剪四周空白 → cropped/` + (options.cropBg ? `，背景色: ${options.cropBg.join(',')}` : '，背景: 透明+纯白') + `，留白: ${options.cropPadding}px`);
+    } else {
+      console.log(`🎯 目标格式: ${options.targetFormat}`);
+    }
     console.log('\n----------------------------------------\n');
 
-    const files = getAllFiles(options.directory, options.extensions, options.recursive, 0, options.maxDepth, options.targetFormat);
+    const files = getAllFiles(options.directory, options.extensions, options.recursive, 0, options.maxDepth, excludeName);
 
     if (files.length === 0) {
-      console.log('✅ 没有找到需要转换的图片文件。');
+      console.log(`✅ 没有找到需要${isCrop ? '裁剪' : '转换'}的图片文件。`);
     } else {
-      console.log(`📋 找到 ${files.length} 个文件，准备开始转换...\n`);
+      console.log(`📋 找到 ${files.length} 个文件，准备开始${isCrop ? '裁剪' : '转换'}...\n`);
 
       let successCount = 0;
       let failCount = 0;
@@ -742,7 +964,7 @@ async function main(): Promise<void> {
         const relativePath = path.relative(options.directory, file);
         process.stdout.write(`  处理中: ${relativePath} ... `);
 
-        const result = await convertImage(file, options.targetFormat, files);
+        const result = await processImage(file, options, files);
 
         if (result.success) {
           const outputRelativePath = path.relative(options.directory, result.outputPath);

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [Unreleased]
+
+### Features
+
+* 新增空白裁剪子命令 `crop`：裁掉图片四周透明 / 纯白 / 自定义背景区域，输出到 `cropped/` 子目录，文件名保持不变
+* `crop` 支持 `--bg <r,g,b>` 自定义背景色、`--padding <n>` 四周留白、`--tolerance` / `--white-tolerance` 容差控制
+* Windows 右键菜单新增「📐 裁剪空白」项，与格式转换同处悬停子菜单
+
 ### [2.1.19](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.18...v2.1.19) (2026-05-25)
 
 
