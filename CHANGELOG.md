@@ -254,7 +254,3 @@ All notable changes to this project will be documented in this file. See [standa
 * remove deprecated husky script lines ([7261d48](https://github.com/GuoSirius/change-image-suffix/commit/7261d4874337105255beeca690d8b6013bc86f1c))
 * remove duplicate content in CHANGELOG.md ([db0f4b6](https://github.com/GuoSirius/change-image-suffix/commit/db0f4b6403935ed713e2df2d6d1029b1b17aabe4))
 * replace inquirer with enquirer for CommonJS compatibility ([6fe88a5](https://github.com/GuoSirius/change-image-suffix/commit/6fe88a51487cb92117e0c487592048b07804c89a))
-
-# Changelog
-
-All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
