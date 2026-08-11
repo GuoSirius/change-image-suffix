@@ -43,32 +43,19 @@ jobs:
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           echo "Extracting release notes for v$VERSION"
-          
+
           if [ -f CHANGELOG.md ]; then
             awk -v ver="$VERSION" '
-              BEGIN { in_section=0; target_level=0 }
-              /^[#]+ \[[^]]+\]/ {
-                # Count leading # characters
-                match($0, /^[#]+/)
-                level = RLENGTH
-                
-                if (in_section) {
-                  # If we find a version line with same or fewer #s, stop
-                  if (level <= target_level) exit
-                  next
-                }
-                
-                if ($0 ~ "\\[v?" ver "\\]") {
-                  in_section = 1
-                  target_level = level
-                  next
-                }
+              # Stop at the NEXT version header (## or ###) regardless of heading level,
+              # so only the section for the target version is captured.
+              /^#+ \[[0-9]/ {
+                if (found) exit
+                if ($0 ~ "\\[v?" ver "\\]") { found=1; next }
+                next
               }
-              in_section {
-                print $0
-              }
+              found { print }
             ' CHANGELOG.md > release_notes.txt
-            
+
             if [ -s release_notes.txt ]; then
               echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
               cat release_notes.txt >> $GITHUB_OUTPUT
