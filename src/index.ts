@@ -68,11 +68,16 @@ const MENU_BASES = [
   { base: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_afo', arg: '"%1"', multiSelect: true },
 ];
 
-// 计算菜单结构签名：菜单定义（文案/子项/挂载点/版本）变化时即视为需刷新，
-// 解决「同版本下新增菜单项（如裁剪空白）后用户看不到变更」的问题。
+// 菜单安装结构版本：当编码/安装行为发生变化（如修复 .reg UTF-16 乱码）时 +1，
+// 强制已安装用户下次运行 cis 时通过 autoUpdate 重新安装菜单。
+const MENU_SCHEMA_VERSION = 2;
+
+// 计算菜单结构签名：菜单定义（文案/子项/挂载点/版本/结构版本）变化时即视为需刷新，
+// 解决「同版本下新增菜单项（如裁剪空白）后用户看不到变更」以及「编码修复未传播」的问题。
 function computeMenuSignature(): string {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
   const spec = JSON.stringify({
+    schema: MENU_SCHEMA_VERSION,
     formats: MENU_FORMATS,
     bases: MENU_BASES.map(({ multiSelect, ...rest }) => rest),
     version: pkg.version,
@@ -264,10 +269,8 @@ function resolveSplitPath(parts: string[]): string[] {
   return parts.map(p => path.resolve(p));
 }
 
-function parseArgs(): CliOptions {
-  const args = process.argv.slice(2);
-
-  const options: CliOptions = {
+function defaultCliOptions(): CliOptions {
+  return {
     directory: process.cwd(),
     recursive: false,
     maxDepth: Infinity,
@@ -278,6 +281,11 @@ function parseArgs(): CliOptions {
     cropBgTolerance: 10,
     cropWhiteTolerance: 8,
   };
+}
+
+function parseArgs(): CliOptions {
+  const args = process.argv.slice(2);
+  const options = defaultCliOptions();
 
   // 用于分类收集的临时数组
   let filesFromFlag: string[] = [];      // -f 收集的文件
@@ -444,17 +452,19 @@ function parseArgs(): CliOptions {
     }
 
     if (!arg.startsWith('-')) {
-      // 位置参数：根据实际类型分类
-      const resolvedPath = path.resolve(arg);
-      if (fs.existsSync(resolvedPath)) {
-        if (fs.statSync(resolvedPath).isFile()) {
-          positionalFiles.push(resolvedPath);
+      // 位置参数：右键菜单可能把含空格的路径拆成多段，先尝试拼接还原
+      const resolved = resolveSplitPath([arg]);
+      for (const rp of resolved) {
+        if (fs.existsSync(rp)) {
+          if (fs.statSync(rp).isFile()) {
+            positionalFiles.push(rp);
+          } else {
+            positionalDirs.push(rp);
+          }
         } else {
-          positionalDirs.push(resolvedPath);
+          // 路径不存在：仍按文件收集，后续以「跳过（不存在）」处理，不计入失败
+          positionalFiles.push(rp);
         }
-      } else {
-        // 文件不存在但不是以 - 开头，当作文件收集（后续验证会报错）
-        positionalFiles.push(resolvedPath);
       }
       i++;
       continue;
@@ -780,6 +790,336 @@ async function processImage(
 }
 
 // ─────────────────────────────────────────
+// 文件/目录处理（模块级，供右键菜单聚合与 CLI 共用）
+// ─────────────────────────────────────────
+
+async function processFiles(files: string[], options: CliOptions, title: string): Promise<{ success: number; fail: number; skip: number }> {
+  const isCrop = options.mode === 'crop';
+  console.log(`\n🖼️  change-image-suffix - ${isCrop ? '空白裁剪工具' : title}\n`);
+  if (isCrop) {
+    console.log(`✂️  模式: 裁剪四周空白 → cropped/`);
+    console.log(`📐 留白: ${options.cropPadding}px` + (options.cropBg ? `，背景色: ${options.cropBg.join(',')}` : '，背景: 透明+纯白'));
+  } else {
+    console.log(`🎯 目标格式: ${options.targetFormat}`);
+  }
+  console.log(`📦 待处理: ${files.length} 个文件\n`);
+  console.log('----------------------------------------\n');
+
+  let totalSuccess = 0;
+  let totalFail = 0;
+  let totalSkip = 0;
+  const failures: string[] = [];
+
+  for (const filePath of files) {
+    const ext = path.extname(filePath).slice(1).toLowerCase();
+    if (!fs.existsSync(filePath)) {
+      console.log(`  ⚠️  跳过（文件不存在）: ${filePath}`);
+      totalSkip++;
+      continue;
+    }
+    if (!SUPPORTED_INPUT_EXTENSIONS.includes(ext)) {
+      console.log(`  ⚠️  跳过（不支持格式: ${ext || '无扩展名'}）: ${filePath}`);
+      totalSkip++;
+      continue;
+    }
+
+    console.log(`  📄 文件: ${filePath}`);
+    process.stdout.write(`     处理中: ${path.basename(filePath)} ... `);
+    const result = await processImage(filePath, options, files);
+
+    if (result.success) {
+      console.log(`✅ -> ${path.relative(path.dirname(filePath), result.outputPath)}`);
+      totalSuccess++;
+    } else {
+      console.log(`❌ 失败 (${result.error})`);
+      totalFail++;
+      failures.push(filePath);
+    }
+  }
+
+  if (failures.length > 0) {
+    console.log('\n❌ 失败的文件:');
+    for (const f of failures) {
+      console.log(`   - ${f}`);
+    }
+  }
+
+  return { success: totalSuccess, fail: totalFail, skip: totalSkip };
+}
+
+async function processDirs(dirs: string[], options: CliOptions): Promise<{ success: number; fail: number; skip: number }> {
+  const isCrop = options.mode === 'crop';
+  if (isCrop) {
+    console.log(`\n✂️  change-image-suffix - 空白裁剪工具`);
+    console.log(`📐 留白: ${options.cropPadding}px` + (options.cropBg ? `，背景色: ${options.cropBg.join(',')}` : '，背景: 透明+纯白'));
+  } else {
+    console.log(`\n🎯 目标格式: ${options.targetFormat}`);
+  }
+  console.log(`📦 待处理: ${dirs.length} 个目录\n`);
+  console.log('----------------------------------------\n');
+
+  let totalSuccess = 0;
+  let totalFail = 0;
+  let totalSkip = 0;
+  const failures: string[] = [];
+
+  for (const inputPath of dirs) {
+    const stat = fs.existsSync(inputPath) ? fs.statSync(inputPath) : null;
+
+    if (!stat) {
+      console.log(`  ⚠️  跳过（不存在）: ${inputPath}`);
+      totalSkip++;
+      continue;
+    }
+
+    if (stat.isFile()) {
+      const ext = path.extname(inputPath).slice(1).toLowerCase();
+      if (!SUPPORTED_INPUT_EXTENSIONS.includes(ext)) {
+        console.log(`  ⚠️  跳过（不支持格式: ${ext || '无扩展名'}）: ${inputPath}`);
+        totalSkip++;
+        continue;
+      }
+
+      console.log(`  📄 文件: ${inputPath}`);
+      process.stdout.write(`     处理中: ${path.basename(inputPath)} ... `);
+      const result = await processImage(inputPath, options, dirs);
+      if (result.success) {
+        console.log(`✅ -> ${path.relative(path.dirname(inputPath), result.outputPath)}`);
+        totalSuccess++;
+      } else {
+        console.log(`❌ 失败 (${result.error})`);
+        totalFail++;
+        failures.push(inputPath);
+      }
+    } else {
+      const files = getAllFiles(inputPath, options.extensions, options.recursive, 0, options.maxDepth, options.mode === 'crop' ? 'cropped' : options.targetFormat);
+      console.log(`  📁 目录: ${inputPath} (${files.length} 个文件)`);
+
+      if (files.length === 0) {
+        console.log('     ✅ 没有找到图片文件');
+        continue;
+      }
+
+      for (const file of files) {
+        process.stdout.write(`     处理中: ${path.basename(file)} ... `);
+        const result = await processImage(file, options, files);
+        if (result.success) {
+          console.log(`✅`);
+          totalSuccess++;
+        } else {
+          console.log(`❌ (${result.error})`);
+          totalFail++;
+          failures.push(file);
+        }
+      }
+    }
+  }
+
+  if (failures.length > 0) {
+    console.log('\n❌ 失败的文件:');
+    for (const f of failures) {
+      console.log(`   - ${f}`);
+    }
+  }
+
+  return { success: totalSuccess, fail: totalFail, skip: totalSkip };
+}
+
+async function runProcessing(options: CliOptions): Promise<number> {
+  const summarize = (success: number, fail: number, skip: number) => {
+    let msg = `📊 转换完成！成功: ${success}, 失败: ${fail}`;
+    if (skip > 0) msg += `, 跳过: ${skip}`;
+    console.log('\n----------------------------------------');
+    console.log(`${msg}\n`);
+  };
+
+  if (options.multiFiles && options.multiFiles.length > 0 && options.multiPaths && options.multiPaths.length > 0) {
+    console.log('\n🖼️  change-image-suffix - 混合模式（文件+目录）\n');
+    const fileResult = await processFiles(options.multiFiles, options, '图片转换工具');
+    console.log('\n');
+    const dirResult = await processDirs(options.multiPaths, options);
+    summarize(fileResult.success + dirResult.success, fileResult.fail + dirResult.fail, fileResult.skip + dirResult.skip);
+    return fileResult.fail + dirResult.fail;
+  } else if (options.multiFiles && options.multiFiles.length > 0) {
+    const result = await processFiles(options.multiFiles, options, '图片转换工具');
+    summarize(result.success, result.fail, result.skip);
+    return result.fail;
+  } else if (options.multiPaths) {
+    console.log(`\n🖼️  change-image-suffix - ${options.mode === 'crop' ? '批量裁剪工具' : '批量转换工具'}\n`);
+    const result = await processDirs(options.multiPaths, options);
+    summarize(result.success, result.fail, result.skip);
+    return result.fail;
+  } else {
+    // ─── 目录批量模式 ───
+    const isCrop = options.mode === 'crop';
+    const excludeName = isCrop ? 'cropped' : options.targetFormat;
+    console.log(`📂 目录: ${options.directory}`);
+    console.log(`🔁 递归: ${options.recursive ? `是 (深度: ${options.maxDepth === Infinity ? '无限制' : options.maxDepth})` : '否'}`);
+    console.log(`📄 后缀: ${options.extensions.join(', ')}`);
+    if (isCrop) {
+      console.log(`✂️  模式: 裁剪四周空白 → cropped/` + (options.cropBg ? `，背景色: ${options.cropBg.join(',')}` : '，背景: 透明+纯白') + `，留白: ${options.cropPadding}px`);
+    } else {
+      console.log(`🎯 目标格式: ${options.targetFormat}`);
+    }
+    console.log('\n----------------------------------------\n');
+
+    const files = getAllFiles(options.directory, options.extensions, options.recursive, 0, options.maxDepth, excludeName);
+
+    if (files.length === 0) {
+      console.log(`✅ 没有找到需要${isCrop ? '裁剪' : '转换'}的图片文件。`);
+      return 0;
+    }
+
+    console.log(`📋 找到 ${files.length} 个文件，准备开始${isCrop ? '裁剪' : '转换'}...\n`);
+    let successCount = 0;
+    let failCount = 0;
+    const results: { input: string; output: string; status: 'success' | 'fail' }[] = [];
+
+    for (const file of files) {
+      const relativePath = path.relative(options.directory, file);
+      process.stdout.write(`  处理中: ${relativePath} ... `);
+      const result = await processImage(file, options, files);
+      if (result.success) {
+        const outputRelativePath = path.relative(options.directory, result.outputPath);
+        console.log(`✅ -> ${outputRelativePath}`);
+        results.push({ input: file, output: result.outputPath, status: 'success' });
+        successCount++;
+      } else {
+        console.log(`❌ 失败 (${result.error})`);
+        results.push({ input: file, output: '', status: 'fail' });
+        failCount++;
+      }
+    }
+
+    console.log('\n----------------------------------------');
+    let msg = `\n📊 转换完成！成功: ${successCount}, 失败: ${failCount}`;
+    if (failCount > 0) {
+      console.log(msg + '\n');
+      console.log('❌ 失败的文件:');
+      for (const r of results.filter(x => x.status === 'fail')) {
+        console.log(`   - ${r.input}`);
+      }
+    } else {
+      console.log(msg + '\n');
+    }
+    return failCount;
+  }
+}
+
+// ─────────────────────────────────────────
+// 右键菜单多实例聚合（保证多选只弹一个窗口）
+// ─────────────────────────────────────────
+const CIS_INBOX = path.join(os.tmpdir(), 'cis-menu-inbox');
+
+interface MenuTask {
+  mode: string;
+  targetFormat: string;
+  files: string[];
+  dirs: string[];
+}
+
+function extractMenuTask(options: CliOptions): MenuTask {
+  const files = options.multiFiles ?? [];
+  let dirs = options.multiPaths ?? [];
+  if (files.length === 0 && dirs.length === 0) {
+    dirs = [options.directory];
+  }
+  return { mode: options.mode, targetFormat: options.targetFormat, files, dirs };
+}
+
+function buildOptionsFromTask(t: MenuTask): CliOptions {
+  const opts = defaultCliOptions();
+  opts.mode = t.mode as 'convert' | 'crop';
+  opts.targetFormat = t.targetFormat;
+  if (t.files.length > 0 && t.dirs.length === 0) {
+    opts.multiFiles = t.files;
+  } else if (t.dirs.length > 0 && t.files.length === 0) {
+    opts.directory = t.dirs[0];
+  } else {
+    opts.multiFiles = t.files;
+    opts.multiPaths = t.dirs;
+  }
+  return opts;
+}
+
+function acquireLock(lockFile: string): boolean {
+  try {
+    fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx' });
+    return true;
+  } catch {
+    // 锁已存在：若持有进程已退出则抢占，避免陈旧锁卡死
+    try {
+      const pid = parseInt(fs.readFileSync(lockFile, 'utf8').trim(), 10);
+      if (!Number.isNaN(pid) && !process.kill(pid, 0)) {
+        fs.unlinkSync(lockFile);
+        fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx' });
+        return true;
+      }
+    } catch { /* 视为锁有效 */ }
+    return false;
+  }
+}
+
+function releaseLock(lockFile: string): void {
+  try { fs.unlinkSync(lockFile); } catch { /* ignore */ }
+}
+
+// 并发的右键菜单调用把任务写入临时 inbox，由首个拿到锁的进程（协调者）统一处理。
+// 返回 { coordinator:false } 表示从属进程（已交出不处理，不弹窗）；否则本进程即为协调者并已处理完所有任务。
+async function coordinateContextMenu(myTask: MenuTask): Promise<{ coordinator: boolean; totalFail: number }> {
+  try {
+    fs.mkdirSync(CIS_INBOX, { recursive: true });
+    const jobFile = path.join(CIS_INBOX, `job-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+    fs.writeFileSync(jobFile, JSON.stringify(myTask));
+
+    const lockFile = path.join(CIS_INBOX, 'lock');
+    if (!acquireLock(lockFile)) {
+      return { coordinator: false, totalFail: 0 };
+    }
+
+    // 协调者：等待并发进程写入各自 job 后统一处理
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+    const tasks: MenuTask[] = [];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await sleep(attempt === 0 ? 300 : 150);
+      const jobs = fs.readdirSync(CIS_INBOX).filter(f => f.startsWith('job-') && f.endsWith('.json'));
+      if (jobs.length === 0) break;
+      for (const j of jobs) {
+        try {
+          tasks.push(JSON.parse(fs.readFileSync(path.join(CIS_INBOX, j), 'utf8')));
+          fs.unlinkSync(path.join(CIS_INBOX, j));
+        } catch { /* ignore */ }
+      }
+    }
+
+    // 按 mode+targetFormat 分组，避免不同格式混在一起
+    const groups = new Map<string, MenuTask>();
+    for (const t of tasks) {
+      const key = `${t.mode}|${t.targetFormat}`;
+      const g = groups.get(key) ?? { mode: t.mode, targetFormat: t.targetFormat, files: [], dirs: [] };
+      g.files.push(...t.files);
+      g.dirs.push(...t.dirs);
+      groups.set(key, g);
+    }
+
+    let totalFail = 0;
+    for (const g of groups.values()) {
+      totalFail += await runProcessing(buildOptionsFromTask(g));
+    }
+
+    releaseLock(lockFile);
+    return { coordinator: true, totalFail };
+  } catch {
+    // 降级：本进程直接处理自己的任务，避免丢失
+    try {
+      return { coordinator: true, totalFail: await runProcessing(buildOptionsFromTask(myTask)) };
+    } catch {
+      return { coordinator: true, totalFail: 0 };
+    }
+  }
+}
+
+// ─────────────────────────────────────────
 // 入口
 // ─────────────────────────────────────────
 
@@ -809,215 +1149,19 @@ async function main(): Promise<void> {
   const options = parseArgs();
   options.mode = mode;
 
-  // ─── 辅助函数：处理文件列表 ───
-  async function processFiles(files: string[], title: string): Promise<{ success: number; fail: number }> {
-    const isCrop = options.mode === 'crop';
-    console.log(`\n🖼️  change-image-suffix - ${isCrop ? '空白裁剪工具' : title}\n`);
-    if (isCrop) {
-      console.log(`✂️  模式: 裁剪四周空白 → cropped/`);
-      console.log(`📐 留白: ${options.cropPadding}px` + (options.cropBg ? `，背景色: ${options.cropBg.join(',')}` : '，背景: 透明+纯白'));
-    } else {
-      console.log(`🎯 目标格式: ${options.targetFormat}`);
-    }
-    console.log(`📦 待处理: ${files.length} 个文件\n`);
-    console.log('----------------------------------------\n');
-
-    let totalSuccess = 0;
-    let totalFail = 0;
-    const failures: string[] = [];
-
-    for (const filePath of files) {
-      const ext = path.extname(filePath).slice(1).toLowerCase();
-      if (!SUPPORTED_INPUT_EXTENSIONS.includes(ext)) {
-        console.log(`  ⚠️  跳过（不支持格式）: ${filePath}`);
-        totalFail++;
-        failures.push(filePath);
-        continue;
-      }
-
-      console.log(`  📄 文件: ${filePath}`);
-      process.stdout.write(`     处理中: ${path.basename(filePath)} ... `);
-      const result = await processImage(filePath, options, files);
-
-      if (result.success) {
-        console.log(`✅ -> ${path.relative(path.dirname(filePath), result.outputPath)}`);
-        totalSuccess++;
-      } else {
-        console.log(`❌ 失败 (${result.error})`);
-        totalFail++;
-        failures.push(filePath);
-      }
-    }
-
-    if (failures.length > 0) {
-      console.log('\n❌ 失败的文件:');
-      for (const f of failures) {
-        console.log(`   - ${f}`);
-      }
-    }
-
-    return { success: totalSuccess, fail: totalFail };
-  }
-
-  // ─── 辅助函数：处理目录列表 ───
-  async function processDirs(dirs: string[]): Promise<{ success: number; fail: number }> {
-    const isCrop = options.mode === 'crop';
-    if (isCrop) {
-      console.log(`\n✂️  change-image-suffix - 空白裁剪工具`);
-      console.log(`📐 留白: ${options.cropPadding}px` + (options.cropBg ? `，背景色: ${options.cropBg.join(',')}` : '，背景: 透明+纯白'));
-    } else {
-      console.log(`\n🎯 目标格式: ${options.targetFormat}`);
-    }
-    console.log(`📦 待处理: ${dirs.length} 个目录\n`);
-    console.log('----------------------------------------\n');
-
-    let totalSuccess = 0;
-    let totalFail = 0;
-    const failures: string[] = [];
-
-    for (const inputPath of dirs) {
-      const stat = fs.existsSync(inputPath) ? fs.statSync(inputPath) : null;
-
-      if (!stat) {
-        console.log(`  ⚠️  跳过（不存在）: ${inputPath}`);
-        totalFail++;
-        failures.push(inputPath);
-        continue;
-      }
-
-      if (stat.isFile()) {
-        const ext = path.extname(inputPath).slice(1).toLowerCase();
-        if (!SUPPORTED_INPUT_EXTENSIONS.includes(ext)) {
-          console.log(`  ⚠️  跳过（不支持格式）: ${inputPath}`);
-          totalFail++;
-          failures.push(inputPath);
-          continue;
-        }
-
-        console.log(`  📄 文件: ${inputPath}`);
-        process.stdout.write(`     处理中: ${path.basename(inputPath)} ... `);
-        const result = await processImage(inputPath, options, dirs);
-        if (result.success) {
-          console.log(`✅ -> ${path.relative(path.dirname(inputPath), result.outputPath)}`);
-          totalSuccess++;
-        } else {
-          console.log(`❌ 失败 (${result.error})`);
-          totalFail++;
-          failures.push(inputPath);
-        }
-      } else {
-        const files = getAllFiles(inputPath, options.extensions, options.recursive, 0, options.maxDepth, options.mode === 'crop' ? 'cropped' : options.targetFormat);
-        console.log(`  📁 目录: ${inputPath} (${files.length} 个文件)`);
-
-        if (files.length === 0) {
-          console.log('     ✅ 没有找到图片文件');
-          continue;
-        }
-
-        for (const file of files) {
-          process.stdout.write(`     处理中: ${path.basename(file)} ... `);
-          const result = await processImage(file, options, files);
-          if (result.success) {
-            console.log(`✅`);
-            totalSuccess++;
-          } else {
-            console.log(`❌ (${result.error})`);
-            totalFail++;
-            failures.push(file);
-          }
-        }
-      }
-    }
-
-    if (failures.length > 0) {
-      console.log('\n❌ 失败的文件:');
-      for (const f of failures) {
-        console.log(`   - ${f}`);
-      }
-    }
-
-    return { success: totalSuccess, fail: totalFail };
-  }
+  // 处理函数已在模块级定义（见 processFiles / processDirs / runProcessing / coordinateContextMenu）
 
   let totalFail = 0;
 
-  // ─── 混合模式：同时有文件和目录 ───
-  if (options.multiFiles && options.multiFiles.length > 0 && options.multiPaths && options.multiPaths.length > 0) {
-    console.log('\n🖼️  change-image-suffix - 混合模式（文件+目录）\n');
-    const fileResult = await processFiles(options.multiFiles, '图片转换工具');
-    console.log('\n');
-    const dirResult = await processDirs(options.multiPaths);
-    totalFail = fileResult.fail + dirResult.fail;
-    console.log('\n----------------------------------------');
-    console.log(`📊 转换完成！成功: ${fileResult.success + dirResult.success}, 失败: ${totalFail}\n`);
-  } else if (options.multiFiles && options.multiFiles.length > 0) {
-    // ─── 单/多文件模式 ───
-    const result = await processFiles(options.multiFiles, '图片转换工具');
-    totalFail = result.fail;
-    console.log('\n----------------------------------------\n');
-    console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
-  } else if (options.multiPaths) {
-    // ─── 多路径模式 ───
-    console.log(`\n🖼️  change-image-suffix - ${options.mode === 'crop' ? '批量裁剪工具' : '批量转换工具'}\n`);
-    const result = await processDirs(options.multiPaths);
-    totalFail = result.fail;
-    console.log('\n----------------------------------------');
-    console.log(`📊 转换完成！成功: ${result.success}, 失败: ${result.fail}\n`);
+  // ─── 右键菜单多实例聚合 / 单次处理 ───
+  if (process.argv.includes('--pause')) {
+    const result = await coordinateContextMenu(extractMenuTask(options));
+    if (!result.coordinator) {
+      return; // 从属进程：任务已交给协调者，不弹窗
+    }
+    totalFail = result.totalFail;
   } else {
-    // ─── 目录批量模式 ───
-    const isCrop = options.mode === 'crop';
-    const excludeName = isCrop ? 'cropped' : options.targetFormat;
-    console.log(`📂 目录: ${options.directory}`);
-    console.log(`🔁 递归: ${options.recursive ? `是 (深度: ${options.maxDepth === Infinity ? '无限制' : options.maxDepth})` : '否'}`);
-    console.log(`📄 后缀: ${options.extensions.join(', ')}`);
-    if (isCrop) {
-      console.log(`✂️  模式: 裁剪四周空白 → cropped/` + (options.cropBg ? `，背景色: ${options.cropBg.join(',')}` : '，背景: 透明+纯白') + `，留白: ${options.cropPadding}px`);
-    } else {
-      console.log(`🎯 目标格式: ${options.targetFormat}`);
-    }
-    console.log('\n----------------------------------------\n');
-
-    const files = getAllFiles(options.directory, options.extensions, options.recursive, 0, options.maxDepth, excludeName);
-
-    if (files.length === 0) {
-      console.log(`✅ 没有找到需要${isCrop ? '裁剪' : '转换'}的图片文件。`);
-    } else {
-      console.log(`📋 找到 ${files.length} 个文件，准备开始${isCrop ? '裁剪' : '转换'}...\n`);
-
-      let successCount = 0;
-      let failCount = 0;
-      const results: { input: string; output: string; status: 'success' | 'fail' }[] = [];
-
-      for (const file of files) {
-        const relativePath = path.relative(options.directory, file);
-        process.stdout.write(`  处理中: ${relativePath} ... `);
-
-        const result = await processImage(file, options, files);
-
-        if (result.success) {
-          const outputRelativePath = path.relative(options.directory, result.outputPath);
-          console.log(`✅ -> ${outputRelativePath}`);
-          results.push({ input: file, output: result.outputPath, status: 'success' });
-          successCount++;
-        } else {
-          console.log(`❌ 失败 (${result.error})`);
-          results.push({ input: file, output: '', status: 'fail' });
-          failCount++;
-        }
-      }
-
-      totalFail = failCount;
-
-      console.log('\n----------------------------------------');
-      console.log(`\n📊 转换完成！成功: ${successCount}, 失败: ${failCount}\n`);
-
-      if (failCount > 0) {
-        console.log('❌ 失败的文件:');
-        for (const r of results.filter(x => x.status === 'fail')) {
-          console.log(`   - ${r.input}`);
-        }
-      }
-    }
+    totalFail = await runProcessing(options);
   }
 
   // 右键菜单调用时，仅在有失败时暂停让用户查看
