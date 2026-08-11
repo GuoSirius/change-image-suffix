@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.2.2](https://github.com/GuoSirius/change-image-suffix/compare/v2.2.1...v2.2.2) (2026-08-11)
+
+
+### Bug Fixes
+
+* **changelog:** 删除末尾重复的 # Changelog 残留头 ([d9fb8d7](https://github.com/GuoSirius/change-image-suffix/commit/d9fb8d75f4096fe64502cc40ec22d4b786897ab6))
+
+
+### Chores
+
+* **memory:** 记录 CHANGELOG 标题层级为预期、不归一 ([0124a5b](https://github.com/GuoSirius/change-image-suffix/commit/0124a5b4d02fbb846c6c2bf94faae89330927382))
+* **memory:** 记录 CHANGELOG 末尾重复头清理 ([a9442cb](https://github.com/GuoSirius/change-image-suffix/commit/a9442cb4d1c5bcc73823f39832b9bfa29d523b0b))
+
 ### [2.2.1](https://github.com/GuoSirius/change-image-suffix/compare/v2.2.0...v2.2.1) (2026-08-11)
 
 
