@@ -19,3 +19,4 @@
 - 构建：`npm run build`（tsc）；`npm link` 注册全局。
 - 提交规范：Conventional Commits + commitlint（husky `commit-msg` 钩子）。
 - 发布：`npm run release`（standard-version 自动更新 CHANGELOG / 打 tag / 推远程 / npm publish）。
+- 发布校验：用 `npm pack --dry-run` 查看 tarball 内容；`files` 白名单优先级高于根 `.npmignore`（根级 `.npmignore` 不会剔除 `files` 中列出的文件，例如生命周期脚本 `scripts/*.cjs` 仍会发布）。
