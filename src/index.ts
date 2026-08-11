@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
+import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 
@@ -50,6 +51,35 @@ function regDelete(key: string): void {
   }
 }
 
+// 右键菜单结构定义（模块级常量，供安装与自动更新共用）
+// formats: 子菜单项（crop 为空白裁剪，其余为目标格式）
+const MENU_FORMATS = [
+  { verb: 'crop', label: '📐 裁剪空白' },
+  { verb: 'webp', label: 'WebP' },
+  { verb: 'jpg', label: 'JPG' },
+  { verb: 'png', label: 'PNG' },
+  { verb: 'avif', label: 'AVIF' },
+  { verb: 'tiff', label: 'TIFF' },
+];
+
+// 主菜单挂载点（HKCU 下）。subMenu 为级联子菜单路径（相对 HKCU\Software\Classes）
+const MENU_BASES = [
+  { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
+  { base: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_afo', arg: '"%1"', multiSelect: true },
+];
+
+// 计算菜单结构签名：菜单定义（文案/子项/挂载点/版本）变化时即视为需刷新，
+// 解决「同版本下新增菜单项（如裁剪空白）后用户看不到变更」的问题。
+function computeMenuSignature(): string {
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const spec = JSON.stringify({
+    formats: MENU_FORMATS,
+    bases: MENU_BASES.map(({ multiSelect, ...rest }) => rest),
+    version: pkg.version,
+  });
+  return createHash('sha256').update(spec).digest('hex').slice(0, 16);
+}
+
 function installContextMenu(): void {
   requireWindows();
 
@@ -82,27 +112,30 @@ function installContextMenu(): void {
   const nodeExe = process.execPath;
   const scriptPath = path.join(__dirname, 'index.js');
 
-  // ── 格式列表（webp 排第一，其他按常见程度排序；crop 为空白裁剪）──
-  const formats = [
-    { verb: 'crop', label: '📐 裁剪空白' },
-    { verb: 'webp', label: 'WebP' },
-    { verb: 'jpg', label: 'JPG' },
-    { verb: 'png', label: 'PNG' },
-    { verb: 'avif', label: 'AVIF' },
-    { verb: 'tiff', label: 'TIFF' },
-  ];
-
   // ── 使用 ExtendedSubCommandsKey，直接调用 node.exe（无 bat 中转）──
   // AllFilesystemObjects 覆盖文件和目录，支持混合多选
-  const menuBases = [
-    { base: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis', arg: '-p "%V"' },
-    { base: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell\\cis', subMenu: 'Directory\\ContextMenus\\cis_afo', arg: '"%1"', multiSelect: true },
-  ];
-
   // 1. 用 .reg 文件写子菜单（避免 cmd.exe 引号嵌套解析出错）
+  // ── 生成完整 .reg 并以 UTF-16 LE + BOM 写入（修复中文/emoji 乱码）──
+  //    Windows 的 reg import 默认要求 UTF-16 LE 带 BOM；UTF-8 写入会导致非 ASCII 乱码。
+  //    主菜单与子菜单全部走同一个 .reg，避免 reg add 受终端代码页影响。
   const regLines: string[] = ['Windows Registry Editor Version 5.00', ''];
-  for (const menu of menuBases) {
-    for (const fmt of formats) {
+
+  // 1a. 主菜单项（级联入口）
+  for (const menu of MENU_BASES) {
+    const mainKey = menu.base.replace(/^HKCU\\/, 'HKEY_CURRENT_USER\\');
+    regLines.push(`[${mainKey}]`);
+    regLines.push(`@="🖼 转换图片 (cis)"`);
+    regLines.push(`"Icon"="${iconPath.replace(/\\/g, '\\\\')}"`);
+    regLines.push(`"ExtendedSubCommandsKey"="${menu.subMenu.replace(/\\/g, '\\\\')}"`);
+    if (menu.multiSelect) {
+      regLines.push(`"MultiSelectModel"="Player"`);
+    }
+    regLines.push('');
+  }
+
+  // 1b. 级联子菜单项（各格式 / 裁剪空白）
+  for (const menu of MENU_BASES) {
+    for (const fmt of MENU_FORMATS) {
       // .reg 语法：值内 \" → 引号，\\ → 反斜杠，%1/%V 保持原样
       // crop 是子命令而非目标格式，命令结构不同
       const cmd = fmt.verb === 'crop'
@@ -118,25 +151,17 @@ function installContextMenu(): void {
       regLines.push('');
     }
   }
+
   const regFile = path.join(appDataDir, 'cis_menu.reg');
-  fs.writeFileSync(regFile, regLines.join('\r\n'), 'utf8');
+  // 关键修复：UTF-16 LE + BOM，否则中文/emoji 乱码
+  fs.writeFileSync(regFile, '\uFEFF' + regLines.join('\r\n'), 'utf16le');
   execSync(`reg import "${regFile}"`, { stdio: 'ignore' });
   try { fs.unlinkSync(regFile); } catch { /* ignore */ }
 
-  // 2. 注册主菜单项
-  for (const menu of menuBases) {
-    execSync(`reg add "${menu.base}" /ve /d "🖼 转换图片 (cis)" /f`, { stdio: 'ignore' });
-    execSync(`reg add "${menu.base}" /v Icon /d "${iconPath}" /f`, { stdio: 'ignore' });
-    execSync(`reg add "${menu.base}" /v ExtendedSubCommandsKey /d "${menu.subMenu}" /f`, { stdio: 'ignore' });
-    if ((menu as any).multiSelect) {
-      execSync(`reg add "${menu.base}" /v MultiSelectModel /d Player /f`, { stdio: 'ignore' });
-    }
-  }
-
-  // 写入版本标记，用于检测 npm update 后自动刷新菜单
+  // 写入版本标记 + 菜单结构签名，用于检测 npm update / 菜单定义变更后自动刷新
   const versionFile = path.join(appDataDir, 'version.json');
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
-  fs.writeFileSync(versionFile, JSON.stringify({ version: pkg.version }), 'utf8');
+  fs.writeFileSync(versionFile, JSON.stringify({ version: pkg.version, signature: computeMenuSignature() }), 'utf8');
 
   console.log('✅ 右键菜单安装成功！');
   console.log('   📁 文件夹空白处/图标右键 → 悬停展开格式/裁剪子菜单');
@@ -192,7 +217,8 @@ function uninstallContextMenu(): void {
   console.log('✅ 右键菜单已卸载');
 }
 
-// 自动检测版本变化并更新右键菜单（解决 npm update 不触发 postinstall 的问题）
+// 自动检测版本变化 / 菜单结构变化并更新右键菜单
+// （解决 npm update 不触发 postinstall，以及同版本新增菜单项后用户看不到变更的问题）
 function autoUpdateContextMenu(): void {
   if (os.platform() !== 'win32') return;
 
@@ -204,13 +230,15 @@ function autoUpdateContextMenu(): void {
 
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
   const currentVersion = pkg.version;
+  const currentSignature = computeMenuSignature();
 
-  let installedVersion = '';
+  let installed = { version: '', signature: '' };
   try {
-    installedVersion = JSON.parse(fs.readFileSync(versionFile, 'utf8')).version || '';
+    installed = JSON.parse(fs.readFileSync(versionFile, 'utf8'));
   } catch { /* ignore */ }
 
-  if (installedVersion !== currentVersion) {
+  // 版本变化或菜单结构变化（如新增裁剪空白项）时，重新同步右键菜单
+  if (installed.version !== currentVersion || installed.signature !== currentSignature) {
     try {
       installContextMenu();
     } catch {
