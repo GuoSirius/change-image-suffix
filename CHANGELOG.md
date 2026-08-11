@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.2.0](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.19...v2.2.0) (2026-08-11)
+
+
+### Features
+
+* 新增空白裁剪子命令 crop 及右键菜单项 ([54c934c](https://github.com/GuoSirius/change-image-suffix/commit/54c934ccea2f162789bf0df559e1fef981014c91))
+
+
+### Chores
+
+* 迁移 .claude 项目记忆到 .workbuddy，删除 .trae 与遗留 CLAUDE.md ([5614192](https://github.com/GuoSirius/change-image-suffix/commit/5614192b6b095843c695f8bf742d09e6bfc60028))
+* **memory:** 记录 npm 发布配置评估结论 ([372c958](https://github.com/GuoSirius/change-image-suffix/commit/372c95893d1a41a72e9dccaba0ffc63387b7cd29))
+* **publish:** 精简发布配置，移除多余产物并明确 files 白名单 ([0f5f2b6](https://github.com/GuoSirius/change-image-suffix/commit/0f5f2b69ea3a08894c77c24a5eb749d286dcb6c3))
+
 ### [2.1.19](https://github.com/GuoSirius/change-image-suffix/compare/v2.1.18...v2.1.19) (2026-05-25)
 
 
