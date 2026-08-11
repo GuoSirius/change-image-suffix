@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.2.5](https://github.com/GuoSirius/change-image-suffix/compare/v2.2.4...v2.2.5) (2026-08-11)
+
+
+### Bug Fixes
+
+* 修复右键裁剪命令未生效（--pause 在 crop 之前导致子命令未识别） ([9eeda67](https://github.com/GuoSirius/change-image-suffix/commit/9eeda675f96fbe25e64fe54c04d879cddc48e9ca))
+
 ### [2.2.4](https://github.com/GuoSirius/change-image-suffix/compare/v2.2.3...v2.2.4) (2026-08-11)
 
 
