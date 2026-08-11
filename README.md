@@ -313,10 +313,8 @@ npm run release:major   # 重大变更
 ## 项目结构
 
 ```
-├── .claude/              # Claude Code 项目记忆与设置
-│   ├── MEMORY.md
-│   ├── memory/
-│   └── settings.local.json
+├── .workbuddy/          # WorkBuddy 项目记忆与设置
+│   └── memory/          # 项目长期记忆与每日工作日志
 ├── .github/workflows/   # GitHub Actions 工作流
 │   └── release.yml      # 自动发布工作流
 ├── .husky/              # Git 钩子
@@ -327,9 +325,8 @@ npm run release:major   # 重大变更
 │   └── preuninstall.js  # npm preuninstall 钩子（自动清理右键菜单）
 ├── src/                 # 源代码
 │   └── index.ts         # 主入口
-├── CLAUDE.md            # 项目上下文文档
 ├── .commitlintrc.json   # commitlint 配置
-├── CHANGELOG.md         # 变更日志
+├── CHANGELOG.md         # 变更日志（发布时自动生成，勿手动维护）
 └── package.json         # 项目配置
 ```
 
