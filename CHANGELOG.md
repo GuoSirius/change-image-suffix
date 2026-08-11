@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.2.3](https://github.com/GuoSirius/change-image-suffix/compare/v2.2.2...v2.2.3) (2026-08-11)
+
+
+### Bug Fixes
+
+* 修复右键菜单中文乱码与菜单变更不自动生效 ([12927a1](https://github.com/GuoSirius/change-image-suffix/commit/12927a1c4ecbeb2eb76b84711147054cd48b1d40))
+
+
+### Documentation
+
+* 记录右键菜单乱码与自动更新修复 ([2909357](https://github.com/GuoSirius/change-image-suffix/commit/29093574f4defae5269312066fb08ddf22f0dae0))
+
 ### [2.2.2](https://github.com/GuoSirius/change-image-suffix/compare/v2.2.1...v2.2.2) (2026-08-11)
 
 
