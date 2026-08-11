@@ -9,6 +9,7 @@
 - 同名不同后缀冲突 → 加 `_01`/`_02` 编号；同格式直接 `copyFileSync` 避免重编码。
 - `dist/` 不入库（prepublishOnly 构建），`src/` 为源码真源。
 - CHANGELOG 由 `npm run release`（standard-version）自动生成，**不要手动维护**。
+- CHANGELOG 版本标题的 `#` 级数按 major/minor/patch 不同（如 2.2.0 为 `##`、旧版为 `###`）属于项目预期，**不要统一归一**；release.yml 的抽取 awk 已改为「遇到下一个版本标题即停」，不依赖层级。
 
 ## 右键菜单（仅 Windows）
 - `cis install-menu` 写入 HKCU，无需管理员；用 `ExtendedSubCommandsKey` 级联子菜单（格式 + 「裁剪空白」），直接调 `node.exe` 避免 bat 编码问题。
